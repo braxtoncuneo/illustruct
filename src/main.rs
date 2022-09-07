@@ -3,9 +3,12 @@
 mod kind;
 mod block_draw;
 mod graph;
+mod mem_ribbon;
+mod access;
+
 
 use block_draw::Vec2;
-use kind::{Kind,Field,Prim};
+use kind::{Kind,Field,Primitive, Composite};
 
 use svg::Document;
 
@@ -33,62 +36,44 @@ struct ToneMap <N: const usize> (RGB[N]);
 fn main()
 {
 
-let uint8_t  = Kind::prim(Prim::U8);
-let uint16_t = Kind::prim(Prim::U16);
-let uint32_t = Kind::prim(Prim::U32);
+use Primitive::*;
+
+let uint8_t  = Kind::prim(U8);
+let uint16_t = Kind::prim(U16);
+let uint32_t = Kind::prim(U32);
 
 
-let point = kind::Kind::comp(
-    Some("Point".to_string()),
-    kind::CompositeMode::Product,
-    vec![
+let point = Kind::comp(Composite {
+    name: "Point".to_string(),
+    mode: kind::CompositeMode::Product,
+    fields: vec![
         Field{name: Some("x".to_string()),kind:&uint16_t},
-        Field{name: Some("y".to_string()),kind:&uint16_t},
+        Field{name: Some("gorp".to_string()),kind:&uint16_t},
         Field{name: Some("z".to_string()),kind:&uint16_t},
     ]
-);
-
-let pnt = kind::Kind::comp(
-    Some("P".to_string()),
-    kind::CompositeMode::Product,
-    vec![
-        Field{name: Some("x".to_string()),kind:&uint16_t},
-        Field{name: Some("y".to_string()),kind:&uint16_t},
-        Field{name: Some("z".to_string()),kind:&uint16_t},
-    ]
-);
+});
 
 
-let tri = kind::Kind::comp(
-    Some("Tri".to_string()),
-    kind::CompositeMode::Sum,
-    vec![
-        Field{name: Some("a".to_string()),kind:&pnt},
-        Field{name: Some("b".to_string()),kind:&pnt},
-        Field{name: Some("c".to_string()),kind:&pnt},
-    ]
-);
-
-let triangle = kind::Kind::comp(
-    Some("Triangle".to_string()),
-    kind::CompositeMode::Sum,
-    vec![
+let triangle = Kind::comp(Composite {
+    name: "Line".to_string(),
+    mode: kind::CompositeMode::Product,
+    fields: vec![
         Field{name: Some("a".to_string()),kind:&point},
         Field{name: Some("b".to_string()),kind:&point},
         Field{name: Some("c".to_string()),kind:&point},
     ]
-);
+});
 
-let tetra = kind::Kind::comp(
-    Some("Tetra".to_string()),
-    kind::CompositeMode::Product,
-    vec![
+let tetra = Kind::comp(Composite {
+    name: "LineUnion".to_string(),
+    mode: kind::CompositeMode::Sum,
+    fields: vec![
         Field{name: Some("p".to_string()),kind:&triangle},
-        Field{name: Some("q".to_string()),kind:&tri},
         Field{name: Some("r".to_string()),kind:&triangle},
-        Field{name: Some("s".to_string()),kind:&tri},
     ]
-);
+});
+
+
 
 
 let spec = &block_draw::BlockDrawSpec {
