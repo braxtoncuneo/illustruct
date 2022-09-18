@@ -21,6 +21,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8a9ee70c43aaf417c914396645a0fa852624801b24ebb7ae78fe8272889ac888"
 
 [[package]]
+name = "illustruct"
+version = "0.1.0"
+dependencies = [
+ "petgraph",
+ "pod",
+ "pom",
+ "svg",
+ "unicode-width",
+]
+
+[[package]]
 name = "indexmap"
 version = "1.9.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -58,6 +69,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "pom"
+version = "3.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "07e2192780e9f8e282049ff9bffcaa28171e1cb0844f49ed5374e518ae6024ec"
+
+[[package]]
 name = "read_exact"
 version = "0.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -68,16 +85,6 @@ name = "svg"
 version = "0.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e72d8b19ab05827afefcca66bf47040c1e66a0901eb814784c77d4ec118bd309"
-
-[[package]]
-name = "type_diag"
-version = "0.1.0"
-dependencies = [
- "petgraph",
- "pod",
- "svg",
- "unicode-width",
-]
 
 [[package]]
 name = "unicode-width"

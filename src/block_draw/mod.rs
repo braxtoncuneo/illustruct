@@ -7,7 +7,7 @@ use svg::node::element::{
     path::Data
 };
 
-use crate::kind::{Kind, composite::{CompositeMode, Field}};
+use crate::kind::{Kind, composite::{CompositeMode, Field, Composite}, array::Array};
 
 use self::util::{Vec2, Translate};
 
@@ -34,6 +34,7 @@ impl BlockDrawSpec {
         self.label_height() + 2.0 * self.label_pads.y
     }
 
+
     fn bare_width(&self,text: &str) -> f32 {
         text.width_cjk() as f32 * self.char_dims.x
     }
@@ -46,6 +47,14 @@ impl BlockDrawSpec {
         self.tpad_width(text) + 2.0 * self.label_pads.x
     }
 
+    pub fn byte_width (&self) -> f32 {
+        self.tpad_width("01234567") + 2.0 * self.prong_width
+    }
+
+    pub fn repr_width (&self) -> f32 {
+        self.tpad_width("0123456789") + 2.0 * self.prong_width
+    }
+
     pub fn draw_header(&self, title: impl fmt::Display, width: f32, notch: bool) -> Group {
         let text = title.to_string();
         let x = self.tpad_width(&text) / 2.0;
@@ -54,12 +63,12 @@ impl BlockDrawSpec {
         let notch_x = notch.then_some(self.prong_width).unwrap_or_default();
 
         let data = Data::new()
-            .move_to((                 0,           0))
-            .line_by(( -self.prong_width, half_height))
-            .line_by((  self.prong_width, half_height))
-            .line_by((             width,           0))
-            .line_by((          -notch_x,-half_height))
-            .line_by((           notch_x,-half_height))
+            .move_to((                 0,               0))
+            .line_by(( -self.prong_width,     half_height))
+            .line_by((  self.prong_width,     half_height))
+            .line_by((             width,               0))
+            .line_by((          -notch_x,    -half_height))
+            .line_by((           notch_x,    -half_height))
             .close();
 
         let path = Path::new()
@@ -86,20 +95,21 @@ impl BlockDrawSpec {
 
         let head_height = self.line_height();
         let half_head = head_height / 2.0;
-        let height = self.line_height() * size as f32;
+        let height = self.line_height() * size as f32 + self.fill_inset;
         let chamfer = if size == 1 { 0.0 } else { self.chamfer_size };
         let rem_height = height - head_height - chamfer;
 
         let width_chopped = width - chamfer;
         let notch_x = notch.then_some(self.prong_width).unwrap_or_default();
         let half_inset = self.fill_inset/2f32;
+        let double_inset = self.fill_inset*2f32;
 
         let data = Data::new()
             .move_to((                 0,                      0))
-            .line_by((                 0, height+self.fill_inset))
+            .line_by((                 0,                 height))
             .line_by((     width_chopped,                      0))
-            .line_by((           chamfer,    -chamfer-half_inset))
-            .line_by((                 0, -rem_height-half_inset))
+            .line_by((           chamfer,               -chamfer))
+            .line_by((                 0,            -rem_height))
             .line_by((          -notch_x,             -half_head))
             .line_by((           notch_x,             -half_head))
             .close();
@@ -110,13 +120,13 @@ impl BlockDrawSpec {
             .set("d", data);
 
         let fill_data = Data::new()
-            .move_to((                 self.fill_inset,          self.fill_inset))
-            .line_by((                               0,   height-self.fill_inset))
-            .line_by((width_chopped - half_inset * 3.0,                        0))
-            .line_by((            chamfer - half_inset,                 -chamfer))
-            .line_by((                               0, -rem_height + half_inset))
-            .line_by((                        -notch_x,  -half_head - half_inset))
-            .line_by((                         notch_x,  -half_head + half_inset))
+            .move_to((                 self.fill_inset,             self.fill_inset))
+            .line_by((                               0,         height-double_inset))
+            .line_by((width_chopped - half_inset * 3.0,                           0))
+            .line_by((            chamfer - half_inset,       -chamfer + half_inset))
+            .line_by((                               0,-rem_height + self.fill_inset))
+            .line_by((                        -notch_x,     -half_head - half_inset))
+            .line_by((                         notch_x,-half_head + self.fill_inset))
             .close();
 
         let fill_path = Path::new()
@@ -182,16 +192,13 @@ impl BlockDrawSpec {
         Group::new().add(path).add(text_node)
     }
 
+
+
     pub fn name_width<'kind>(&self, kind: &'kind Kind<'kind> ) -> f32 {
         self.tpad_width(&kind.to_string())
     }
 
-    pub fn member_width<'kind>(&self,kind: &'kind Kind<'kind>) -> f32 {
-        let comp = match kind {
-            Kind::Composite(comp) => comp,
-            _ => return 0.0,
-        };
-
+    pub fn composite_member_width<'kind>(&self,comp: &'kind Composite<'kind>) -> f32 {
         match comp.mode {
             CompositeMode::Product => comp.fields.iter()
                 .enumerate()
@@ -209,9 +216,38 @@ impl BlockDrawSpec {
         }
     }
 
+    pub fn array_member_width<'kind>(&self,array: &Array<'kind>) -> f32 {        
+        if array.size == 0 {
+            return 0.0f32;
+        }
+
+        let first_field = Field {
+            name: Some(0usize.to_string()),
+            kind: array.kind,
+        };
+        let first_width = self.field_width(&first_field, true) + self.prong_xpad;
+        
+        let last_field = Field {
+            name: Some((array.size-1).to_string()),
+            kind: array.kind,
+        };
+        let last_width = self.field_width(&last_field, false) + self.prong_xpad;
+
+        first_width.max(last_width)
+    }
+
+    pub fn member_width<'kind>(&self,kind: &'kind Kind<'kind>) -> f32 {
+        match kind {
+            Kind::Composite(comp)  => self.composite_member_width(comp),
+            Kind::Array    (array) => self.array_member_width(array),
+            _ => 0.0,
+        }
+    }
+
     pub fn unlabeled_width(&self, kind: &Kind<'_>, _notch: bool) -> f32 {
         let prong_width = match kind {
             Kind::Composite(_) => self.prong_width,
+            Kind::Array    (_) => self.prong_width,
             _ => 0.0,
         };
 
@@ -234,7 +270,7 @@ impl BlockDrawSpec {
             + self.label_pads.x * 2f32
     }
 
-    pub fn plan_primitiv<'kind>(
+    pub fn plan_primitive<'kind>(
         &'kind self,
         kind: &'kind Kind<'kind>,
         mins:Vec2,
@@ -254,7 +290,9 @@ impl BlockDrawSpec {
                 width.unwrap_or(self.unlabeled_width(kind, notch)),
                 notch,
             ),
+            head_offset: 0f32,
             body_plan: None,
+            relative_pos: None,
             mins,
             maxs: mins+dims,
             kind,
@@ -262,6 +300,51 @@ impl BlockDrawSpec {
             graph_index: None,
         }
     }
+
+    pub fn plan_array_fields<'kind>(
+        &'kind self,
+        array: &Array<'kind>,
+        mins: Vec2,
+        width: f32,
+    ) -> Vec<block_plan::BlockDiagPlan<'kind>>
+    {
+        let mut field_plans: Vec<block_plan::BlockDiagPlan> = Vec::new();
+        let mut offset = 0;
+        let mut deltas = Vec2::default();
+
+        for index in 0..array.size {
+
+            let field = Field{
+                name: Some(index.to_string()),
+                kind: array.kind,
+            };
+
+            let pad = field.kind.align_pad(offset);
+            let pad_height = pad as f32 * self.line_height();
+            let size = field.kind.size_of();
+            let size_height = size as f32 * self.line_height();
+
+            deltas.y += pad_height;
+
+            let notch = offset == 0;
+
+            let mut f_plan = field.make_plan(
+                self,
+                mins+deltas,
+                Some(width),
+                notch
+            );
+
+            f_plan.relative_pos  = Some(deltas);
+
+            field_plans.push(f_plan);
+            deltas.y += size_height;
+            offset += size + pad;
+        }
+
+        field_plans
+    }
+
 
     pub fn plan_product_fields<'kind>(
         &'kind self,
@@ -282,6 +365,9 @@ impl BlockDrawSpec {
 
             deltas.y += pad_height;
 
+            let (x,y) = (deltas.x+mins.x,deltas.y+mins.y);
+            println!("({x},{y})");
+
             let notch = offset == 0;
 
             let mut f_plan = field.make_plan(
@@ -291,10 +377,7 @@ impl BlockDrawSpec {
                 notch
             );
 
-            if let Some(body_plan) = &mut f_plan.body_plan {
-                _ = body_plan.relative_pos.insert(deltas);
-                //g.clone().set("transform", Translate(x, y));
-            };
+            f_plan.relative_pos  = Some(deltas);
 
             field_plans.push(f_plan);
             deltas.y += size_height;
@@ -323,9 +406,7 @@ impl BlockDrawSpec {
                 notch
             );
 
-            if let Some(body_plan) = &mut f_plan.body_plan {
-                _ = body_plan.relative_pos.insert(deltas);
-            };
+            f_plan.relative_pos  = Some(deltas);
 
             field_plans.push(f_plan);
             deltas.x += w;
@@ -348,7 +429,6 @@ impl BlockDrawSpec {
         let body_plan = block_plan::BlockBodyPlan {
             block_width,
             notch,
-            relative_pos: None,
         };
 
         let fields = match kind {
@@ -363,30 +443,38 @@ impl BlockDrawSpec {
                     mins
                 ),
             },
+            Kind::Array(array) => self.plan_array_fields(
+                    array,
+                    mins,
+                    self.member_width(kind)
+                ),
             _ => Default::default(),
         };
 
         let gapped = match kind {
             Kind::Composite(_) => true,
+            Kind::Array    (_) => true,
             _ => false,
         };
+
 
         let maxs = mins + Vec2::new(block_width,block_height);
 
         let member_width = self.member_width(kind);
         let prong_padding = if gapped { self.prong_xpad } else { 0.0 };
-        let header_offset = member_width + prong_padding;
+        let head_offset = member_width + prong_padding;
         let head = self
             .draw_header(
                 &kind.to_string(),
                 block_width - member_width - prong_padding,
                 notch,
-            )
-            .set("transform", Translate(header_offset, 0.0));
+            );
 
         block_plan::BlockDiagPlan {
             spec: self,
             head,
+            head_offset,
+            relative_pos: None,
             body_plan: Some(body_plan),
             mins,
             maxs,

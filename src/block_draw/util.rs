@@ -1,11 +1,11 @@
-use std::{ops::Add, iter::Peekable};
+use std::{ops::{Add, AddAssign, Sub, SubAssign}, iter::Peekable};
 
 use petgraph::stable_graph::NodeIndex;
 
 #[derive(Clone,Copy)]
 struct RGB(u8, u8, u8);
 
-#[derive(Clone, Copy, PartialEq, Default)]
+#[derive(Clone, Copy, PartialEq, Default, Debug)]
 pub struct Vec2 {
     pub x: f32,
     pub y: f32,
@@ -15,6 +15,15 @@ impl Vec2 {
     pub fn new(x: f32, y: f32) -> Self {
         Self { x, y }
     }
+
+    pub fn min(&self, other: Self) -> Self {
+        Self { x: self.x.min(other.x), y: self.y.min(other.y) }
+    }
+
+    pub fn max(&self, other: Self) -> Self {
+        Self { x: self.x.max(other.x), y: self.y.max(other.y) }
+    }
+
 }
 
 impl Add for Vec2 {
@@ -22,6 +31,27 @@ impl Add for Vec2 {
 
     fn add(self, rhs: Self) -> Self::Output {
         Self { x: self.x + rhs.x, y: self.y + rhs.y }
+    }
+}
+
+impl AddAssign for Vec2 {
+    fn add_assign(&mut self, rhs: Self) {
+        *self = *self + rhs;
+    }
+}
+
+impl Sub for Vec2 {
+    type Output = Vec2;
+
+    fn sub(self, rhs: Self) -> Self::Output {
+        Self { x: self.x - rhs.x, y: self.y - rhs.y }
+    }
+}
+
+
+impl SubAssign for Vec2 {
+    fn sub_assign(&mut self, rhs: Self) {
+        *self = *self - rhs;
     }
 }
 

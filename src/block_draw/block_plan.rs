@@ -9,18 +9,19 @@ use svg::node::element::Group;
 pub struct BlockBodyPlan {
     pub block_width: f32,
     pub notch: bool,
-    pub relative_pos: Option<Vec2>,
 }
 
 pub struct BlockDiagPlan<'kind> {
     pub spec: &'kind BlockDrawSpec,
     pub head: Group,
+    pub head_offset: f32,
     pub body_plan: Option<BlockBodyPlan>,
     pub mins: Vec2,
     pub maxs: Vec2,
     pub kind: &'kind Kind<'kind>,
     pub sub_blocks: Vec<BlockDiagPlan<'kind>>,
     pub graph_index: Option<NodeIndex>,
+    pub relative_pos: Option<Vec2>,
 }
 
 impl<'kind> BlockDiagPlan<'kind> {
@@ -31,7 +32,6 @@ impl<'kind> BlockDiagPlan<'kind> {
     ) {
         if self.body_plan.is_some() {
             let index = *self.graph_index.get_or_insert_with(|| graph.add_node(()));
-            println!("{} @ {}", index.index(), self.kind);
             if let Some(p_idx) = parent {
                 graph.add_edge(p_idx, index, ());
             };
@@ -79,7 +79,6 @@ impl<'kind> BlockDiagPlan<'kind> {
                     let (sub_top, sub_bot) = sub_pair;
 
                     for (a, b) in BlockAdjListPairIter::new(bot, sub_top) {
-                        println!("P {} <- {}", a.index(), b.index());
                         graph.add_edge(a, b, ());
                     };
 
@@ -151,6 +150,7 @@ impl<'kind> BlockDiagPlan<'kind> {
                 CompositeMode::Product => self.block_product_stack(graph, left_side),
                 CompositeMode::Sum => self.block_sum_row(graph,left_side),
             }
+            Kind::Array(_) => self.block_product_stack(graph, left_side),
             _ => {
                 let index = self.graph_index.unwrap();
                 let spans = vec![BlockAdjSpan {
@@ -158,7 +158,6 @@ impl<'kind> BlockDiagPlan<'kind> {
                     max: self.maxs.x,
                     index
                 }];
-                println!("At {}",index.index());
                 if let Some(lefty) = left_side {
                     graph.add_edge(index,lefty,());
                 }
@@ -170,38 +169,54 @@ impl<'kind> BlockDiagPlan<'kind> {
     pub fn into_svg_recurse(&mut self, color_map: &HashMap<NodeIndex, usize>) -> Group {
         //let colors : [&str;8] = ["red","green","blue","magenta","cyan","yellow","grey","white" ];
         let colors : [&str;8] = ["#DDD","#BBB","#999","#777","#555","#333","#111","#222" ];
-        //let colors : [&str;8] = ["#FBB","#D99","#B77","#955","#733","yellow","grey","white" ];
-        //let colors : [&str;8] = ["#FFB","#9DD","#B7B","#595","#733","#115","grey","white" ];
 
-        println!("Drawing {}", self.kind);
+        let base_pos = self.relative_pos.unwrap_or_default();
 
         let base_group = self.body_plan.as_ref()
             .map(|body_plan| {
                 let tone = colors[color_map[&self.graph_index.unwrap()]];
 
                 self.spec.draw_block(self.kind, body_plan.block_width, body_plan.notch)
-                    .map(|group| group
-                        .set("transform", Translate::from(body_plan.relative_pos.unwrap_or_default()))
-                        .set("fill", tone)
-                    )
+                    .map(|group| group.set("fill", tone))
                     .unwrap_or_default()
             })
-            .unwrap_or_default();
+            .unwrap_or_default()
+            .set("transform", Translate::from(base_pos));
 
         self.sub_blocks.iter_mut()
             .fold(base_group, |b,sub| b.add(sub.into_svg_recurse(color_map)))
-            .add(self.head.clone())
+            .add(self.head.clone()
+                .set("transform",Translate(self.head_offset,0f32))
+        )
     }
 
     pub fn into_svg (&mut self) -> Group {
         let mut color_graph = StableGraph::<(),(),Undirected>::default();
-        println!("Setting up nodes!");
         self.setup_nodes(&mut color_graph, None);
-        println!("Linking nodes!");
         self.block_graph_recurse(&mut color_graph, None);
-        println!("Coloring nodes!");
         let color_map = crate::graph::block_graph_color(&color_graph);
-        println!("Generating SVG!");
         self.into_svg_recurse(&color_map)
     }
+
+
+    pub fn member_svg_recurse(&mut self, color_map: &HashMap<NodeIndex, usize>) -> Group {
+        let base_pos = self.relative_pos.unwrap_or_default();
+
+        let base_group = Group::new().set("transform", Translate::from(base_pos));
+
+        self.sub_blocks.iter_mut()
+            .fold(base_group, |b,sub| b.add(sub.into_svg_recurse(color_map)))
+            .add(self.head.clone()
+                .set("transform",Translate(self.head_offset,0f32))
+        )
+    }
+
+    pub fn member_svg (&mut self) -> Group {
+        let mut color_graph = StableGraph::<(),(),Undirected>::default();
+        self.setup_nodes(&mut color_graph, None);
+        self.block_graph_recurse(&mut color_graph, None);
+        let color_map = crate::graph::block_graph_color(&color_graph);
+        self.member_svg_recurse(&color_map)
+    }
+
 }

@@ -10,11 +10,12 @@ use crate::{
 
 pub mod reference;
 pub mod composite;
+pub mod array;
 
 use reference::Reference;
 use composite::Composite;
 
-use self::{composite::{CompositeMode, Field}, reference::ReferenceMode};
+use self::{composite::{CompositeMode, Field}, reference::ReferenceMode, array::Array};
 
 pub enum PrimValue {
     Bool(bool),
@@ -24,6 +25,29 @@ pub enum PrimValue {
                       F32(f32), F64(f64),
     Size(u32),
 }
+
+
+impl fmt::Display for PrimValue {
+
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            PrimValue::Bool(x) => write!(f,"{}",x),
+            PrimValue::Char(x) => write!(f,"{:?}",*x as char),
+            PrimValue::U8(x)   => write!(f,"{}",x),
+            PrimValue::U16(x)  => write!(f,"{}",x),
+            PrimValue::U32(x)  => write!(f,"{}",x),
+            PrimValue::U64(x)  => write!(f,"{}",x),
+            PrimValue::I8(x)   => write!(f,"{}",x),
+            PrimValue::I16(x)  => write!(f,"{}",x),
+            PrimValue::I32(x)  => write!(f,"{}",x),
+            PrimValue::I64(x)  => write!(f,"{}",x),
+            PrimValue::F32(x)  => write!(f,"{}",x),
+            PrimValue::F64(x)  => write!(f,"{}",x),
+            PrimValue::Size(x) => write!(f,"{}",x),
+        }
+    }
+}
+
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Primitive {
@@ -36,7 +60,7 @@ pub enum Primitive {
 }
 
 impl Primitive {
-    fn parse_at(&self, ribbon: &MemRibbon, address: usize) -> Option<PrimValue> {
+    pub fn parse_at(&self, ribbon: &MemRibbon, address: usize) -> Option<PrimValue> {
         use Primitive::*;
 
         let mut value = match self {
@@ -87,7 +111,7 @@ impl Primitive {
         Some(value)
     }
 
-    fn size_of(&self) -> u16 {
+    pub(crate) fn size_of(&self) -> u16 {
         use Primitive::*;
         match self {
             Bool => 1,
@@ -124,13 +148,25 @@ impl fmt::Display for Primitive {
             Size =>  "size_t",
         })
     }
+
 }
+
+
+#[derive(Clone)]
+pub struct Alias<'kind> {
+    name: String,
+    kind: &'kind Kind<'kind>
+}
+
+
 
 #[derive(Clone)]
 pub enum Kind<'kind> {
     Primitive(Primitive),
     Reference(Reference<'kind>),
     Composite(Composite<'kind>),
+    Array    (Array<'kind>),
+    Alias    (Alias<'kind>),
 }
 
 impl<'kind> Kind<'kind> {
@@ -142,15 +178,26 @@ impl<'kind> Kind<'kind> {
         Kind::Reference(Reference { mode, kind })
     }
 
-    pub fn comp(name: String, mode: CompositeMode, fields: Vec<Field<'kind>>) -> Self {
-        Kind::Composite(Composite { name, mode, fields })
+    pub fn comp<T: ToString>(name: T, mode: CompositeMode, fields: Vec<Field<'kind>>) -> Self {
+        Kind::Composite(Composite { name: name.to_string(), mode, fields })
     }
+
+    pub fn array(kind: &'kind Kind<'kind>, size: usize) -> Self {
+        Kind::Array(Array{kind,size})
+    }
+
+    pub fn alias<T: ToString>(name: T, kind: &'kind Kind<'kind>) -> Self {
+        Kind::Alias(Alias{name: name.to_string() ,kind})
+    }
+
 
     pub fn category(&self) -> &dyn Display {
         match self {
             Kind::Primitive(x) => x,
             Kind::Reference(x) => &x.mode,
             Kind::Composite(x) => &x.mode,
+            Kind::Array    (x) => x,
+            Kind::Alias(x)     => x.kind.category(),
         }
     }
 
@@ -159,6 +206,8 @@ impl<'kind> Kind<'kind> {
             Kind::Primitive(x) => x.size_of(),
             Kind::Reference(x) => x.size_of(),
             Kind::Composite(x) => x.size_of(),
+            Kind::Array(x)     => x.size_of(),
+            Kind::Alias(x)     => x.kind.size_of(),
         }
     }
 
@@ -167,8 +216,11 @@ impl<'kind> Kind<'kind> {
             Kind::Primitive(x) => x.align_of(),
             Kind::Reference(x) => x.align_of(),
             Kind::Composite(x) => x.align_of(),
+            Kind::Array    (x) => x.align_of(),
+            Kind::Alias(x)     => x.kind.align_of(),
         }
     }
+
 
     pub fn align_pad(&self,offset:u16) -> u16 {
         let align = self.align_of();
@@ -177,6 +229,17 @@ impl<'kind> Kind<'kind> {
             0
         } else {
             align - remainder
+        }
+    }
+
+    pub fn base_fields(&self, address: &mut usize) -> Vec<(usize, Primitive)> {
+        *address += self.align_pad(*address as u16) as usize;
+        match self {
+            Kind::Primitive(prim) => vec![(*address,*prim)],
+            Kind::Reference(refr) => vec![(*address,Primitive::Size)],
+            Kind::Composite(comp) => comp.base_fields(address),
+            Kind::Array(x)        => x.base_fields(address),
+            Kind::Alias(x)        => x.kind.base_fields(address),
         }
     }
 
@@ -199,15 +262,22 @@ impl<'kind> Kind<'kind> {
     }
 
     pub fn access(&'kind self, trace: &mut AccessTrace<'kind>) -> Result<PlaceValue<'kind>, Error> {
-        let unit = match trace.iter.next() {
+
+        if let Kind::Alias(x) = self {
+            return x.kind.access(trace);
+        }
+
+        let unit = match trace.access.pop_front() {
             Some(unit) => unit,
             None => return self.empty_access(trace),
         };
 
         match self {
-            Kind::Primitive(x) => x.access(unit, trace),
-            Kind::Reference(x) => x.access(unit, trace),
-            Kind::Composite(x) => x.access(unit, trace),
+            Kind::Primitive(x) => x.access(&unit, trace),
+            Kind::Reference(x) => x.access(&unit, trace),
+            Kind::Composite(x) => x.access(&unit, trace),
+            Kind::Array    (x) => x.access(&unit, trace),
+            Kind::Alias    (_) => unreachable!(),
         }.map_err(|err|
             err.with_context(self.category(), trace.field_name.as_str())
         )
@@ -220,6 +290,8 @@ impl fmt::Display for Kind<'_> {
             Kind::Primitive(primitive) => write!(f, "{primitive}"),
             Kind::Reference(reference) => write!(f, "{reference}"),
             Kind::Composite(composite) => write!(f, "{composite}"),
+            Kind::Array    (array)     => write!(f, "{array}"),
+            Kind::Alias    (alias)     => write!(f, "{}",alias.name ),
         }
     }
 }

@@ -1,12 +1,17 @@
 #![allow(dead_code)]
 
-use std::fmt;
+use std::arch::x86_64::_SIDD_CMP_EQUAL_EACH;
+use std::collections::{VecDeque,vec_deque};
+use std::fmt::{self, Display};
+use std::str::FromStr;
 
 use crate::kind::Kind;
 
 use crate::mem_ribbon::MemRibbon;
 
+
 #[non_exhaustive]
+#[derive(Clone)]
 pub enum MemByte {
     Undefined,
     OutOfBounds,
@@ -29,6 +34,17 @@ impl MemByte {
         }
     }
 }
+
+impl fmt::Display for MemByte {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            MemByte::Undefined   => write!(f,"----"),
+            MemByte::OutOfBounds => write!(f,"OOB"),
+            MemByte::Byte(x)     => write!(f,"{:08b}",x),
+        }
+    }
+}
+
 
 pub struct PlaceValue<'kind> {
     pub kind: &'kind Kind <'kind>,
@@ -56,26 +72,28 @@ impl AccessUnit {
 
 #[derive(Debug)]
 pub struct Access {
-    sequence: Vec<AccessUnit>,
+    pub(crate) sequence: VecDeque<AccessUnit>,
 }
 
 impl Access {
     pub fn new(base: &str) -> Self {
-        Self { sequence: vec![AccessUnit::Field(base.into())] }
+        let mut sequence = VecDeque::new();
+        sequence.push_back(AccessUnit::Field(base.into()));
+        Self { sequence }
     }
 
     pub fn deref(mut self) -> Self {
-        self.sequence.push(AccessUnit::Index(0usize));
+        self.sequence.push_back(AccessUnit::Index(0usize));
         self
     }
 
     pub fn index(mut self,idx: usize) -> Self {
-        self.sequence.push(AccessUnit::Index(idx));
+        self.sequence.push_back(AccessUnit::Index(idx));
         self
     }
 
     pub fn field(mut self,fname: &str) -> Self {
-        self.sequence.push(AccessUnit::Field(fname.to_string()));
+        self.sequence.push_back(AccessUnit::Field(fname.to_string()));
         self
     }
 
@@ -83,43 +101,27 @@ impl Access {
         self.deref().field(fname)
     }
 
-    pub fn iter<'a>(&'a self) -> AccessIter<'a> {
-        AccessIter::over(self)
+}
+
+impl <T> From<T> for Access 
+where T: Into<VecDeque<AccessUnit>> {
+    fn from(collection: T) -> Self {
+        Access{ sequence: collection.into() }
     }
 }
 
-pub struct AccessIter<'kind> {
-    access: &'kind Access,
-    position: usize,
-}
-
-impl<'kind> AccessIter<'kind> {
-    fn over(access: &'kind Access) -> Self {
-        Self { access, position: 0 }
-    }
-}
-
-impl <'kind> Iterator for AccessIter <'kind> {
-    type Item = &'kind AccessUnit;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        let result = self.access.sequence.get(self.position);
-        self.position += 1;
-        result
-    }
-}
 
 pub struct AccessTrace <'kind> {
     pub ribbon: &'kind MemRibbon <'kind>,
-    pub iter: AccessIter <'kind>,
+    pub access: VecDeque<AccessUnit>,
     pub address: usize,
     pub field_name : String,
 }
 
 pub struct Error<'a> {
-    field_name: String,
-    kind: ErrorKind<'a>,
-    context: Option<String>,
+    pub(crate) field_name: String,
+    pub(crate) kind: ErrorKind<'a>,
+    pub(crate) context: Option<String>,
 }
 
 impl<'a> Error<'a> {
@@ -148,6 +150,10 @@ impl fmt::Display for Error<'_> {
                 write!(f, "Bad deref of address {old_addr} for reference field {field_name}")?,
             ErrorKind::SubField { name } =>
                 write!(f, "Attempted to access non-existant field {name:?} in composite type {field_name}")?,
+            ErrorKind::DirectAccess =>
+                write!(f, "{field_name} cannot be accessed as a field")?,
+            ErrorKind::RibbonOp { op } =>
+                write!(f, "Operation {op} undefined for MemoryRibbon")?,
         }
 
         if let Some(s) = context {
@@ -157,6 +163,13 @@ impl fmt::Display for Error<'_> {
         Ok(())
     }
 }
+
+impl fmt::Debug for Error<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f,"{}",self)
+    }
+}
+
 
 pub enum ErrorKind<'a> {
     Operation {
@@ -175,6 +188,10 @@ pub enum ErrorKind<'a> {
     },
     SubField {
         name: String,
+    },
+    DirectAccess,
+    RibbonOp {
+        op: &'static str,
     },
 }
 
@@ -250,24 +267,20 @@ mod test {
 
 }
 
-// impl FromStr for AccessBuf
-// {
-//     type Err = String;
 
-//     fn from_str(s: &str) -> Result<Self, Self::Err> {
-//         let mut rest : Vec<AccessSegment> = Vec::new();
-//         for findex, fpath in s.split('.').enumerate()
-//         {
-//             if findex == 0 {
+mod parse;
 
-//             }
-//             for iindex, ipath in s.split('@').enumerate()
-//             {
 
-//             }
-//         }
+impl FromStr for Access
+{
+    type Err = pom::Error;
 
-//     }
-// }
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let char_vec : Vec<char>= s.chars().collect();
+        let result = parse::access_expr().parse(&char_vec.as_slice());
+        result
+    }
+}
+
 
 

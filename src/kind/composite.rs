@@ -6,6 +6,8 @@ use crate::{
 
 use std::fmt;
 
+use super::Primitive;
+
 #[derive(Clone)]
 pub struct Field<'kind> {
     pub name: Option<String>,
@@ -32,7 +34,7 @@ impl<'a> Field<'a> {
                 };
                 let label_pos_x : f32 = width - left_width - spec.label_width(label) - spec.label_pads.x;
                 // spec.name_width(self.kind) + spec.label_pads.x + spec.text_pads.x * 2f32;
-                let label_pos_y : f32 = spec.label_pads.y;
+                let label_pos_y : f32 = spec.label_pads.y + spec.fill_inset * 0.5f32;
                 let label_svg = spec.draw_label(label)
                     .set("transform", Translate(label_pos_x, label_pos_y));
                 plan.head = plan.head.add(label_svg);
@@ -72,8 +74,8 @@ impl<'kind> Composite<'kind> {
             .unwrap_or_default()
     }
 
-    pub(crate) fn size_of(&self) -> u16 {
-        let base_size = match self.mode {
+    pub(crate) fn size_of_no_end_pad(&self) -> u16 {
+        match self.mode {
             CompositeMode::Product => self.fields.iter().fold(0, |acc,x|
                 acc + x.kind.size_of() + x.kind.align_pad(acc)
             ),
@@ -81,7 +83,11 @@ impl<'kind> Composite<'kind> {
                 .map(|x| x.kind.size_of())
                 .max()
                 .unwrap_or_default()
-        };
+        }
+    }
+
+    pub(crate) fn size_of(&self) -> u16 {
+        let base_size = self.size_of_no_end_pad();
         let align = self.align_of();
         let remainder = base_size % align;
         let padding = if remainder > 0 { align - remainder } else { 0 };
@@ -97,6 +103,7 @@ impl<'kind> Composite<'kind> {
         let mut result = 0;
 
         for field in self.fields.iter() {
+            result += field.kind.align_pad(result);
             let name = match field.name.as_ref() {
                 Some(name) => name,
                 None => continue,
@@ -105,12 +112,26 @@ impl<'kind> Composite<'kind> {
             if field_name == name {
                 return Some(result)
             }
-
-            result += field.kind.align_pad(result);
             result += field.kind.size_of();
         }
 
         None
+    }
+
+    pub fn base_fields(&self, address: &mut usize) -> Vec<(usize,Primitive)> {
+
+        if self.mode == CompositeMode::Sum {
+            if self.fields.is_empty() {
+                return Vec::new();
+            } else {
+                return self.fields[0].kind.base_fields(address);
+            }
+        }
+
+        self.fields.iter()
+            .map(|f| f.kind.base_fields(address))
+            .flatten()
+            .collect()
     }
 
     pub(crate) fn type_of(&'kind self, field_name: &str) -> Option<&'kind Kind<'kind>> {
