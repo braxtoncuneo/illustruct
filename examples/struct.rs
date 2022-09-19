@@ -8,7 +8,7 @@ use illustruct::{
         composite::{
             Field,
             CompositeMode,
-        },
+        }, reference::ReferenceMode,
     },
     block_draw::{
         BlockDrawSpec,
@@ -28,14 +28,14 @@ fn main() {
     let float     = Kind::from(F32);
 
     let spec = &BlockDrawSpec {
-        char_dims:  Vec2::new(10.0, 16.0),
-        text_pads:  Vec2::new( 4.0,  4.0),
-        label_pads: Vec2::new( 10.0,  4.0),
-        union_xpad: 6.0,
-        fill_inset: 3.0,
-        prong_width: 12.0,
-        prong_xpad: 6.0,
-        chamfer_size : 12.0
+        char_dims:  Vec2::new(  5.0,  8.0),
+        text_pads:  Vec2::new(  2.0,  2.0),
+        label_pads: Vec2::new(  5.0,  2.0),
+        union_xpad: 3.0,
+        fill_inset: 1.5,
+        prong_width: 6.0,
+        prong_xpad:  3.0,
+        chamfer_size : 6.0
     };
 
     Kind::comp(
@@ -60,11 +60,12 @@ fn main() {
             Field::new("y",&float),
         ],
     );
-    point.into_ribbon()
-    .save_svg("point.svg", spec, false, true);
+    
+    let point_rib = point.into_ribbon();
+    point_rib.save_svg("point.svg", spec, false, true);
 
 
-    Kind::comp(
+    let tri = Kind::comp(
         "Triangle",
         CompositeMode::Product,
         vec![
@@ -72,7 +73,9 @@ fn main() {
             Field::new("b",&point),
             Field::new("c",&point),
         ],
-    ).into_ribbon()
-    .save_svg("triangle.svg", spec, false, true);
+    );
+    let tri_rib = tri.into_ribbon();
+    tri_rib.save_svg("triangle.svg", spec, false, true);
+
 
 }

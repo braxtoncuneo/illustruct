@@ -91,8 +91,9 @@ fn main() {
         ],
     );
 
-    compact_struct.into_ribbon()
-        .save_svg("compact_struct.svg", spec, false, true);
+    let comp_rib = compact_struct.into_ribbon();
+        comp_rib.save_svg("compact_struct.svg", spec, false, true);
+
     padded_struct.into_ribbon()
         .save_svg("padded_struct.svg", spec, false, true);
 

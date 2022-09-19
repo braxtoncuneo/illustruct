@@ -4,7 +4,7 @@ use crate::{
     block_draw::{block_plan::BlockDiagPlan, util::{Vec2, Translate}, BlockDrawSpec},
 };
 
-use std::fmt;
+use std::{fmt, cell::RefCell};
 
 use super::Primitive;
 
@@ -67,12 +67,12 @@ impl fmt::Display for CompositeMode {
 pub struct Composite<'kind> {
     pub name: String,
     pub mode: CompositeMode,
-    pub fields: Vec<Field<'kind>>,
+    pub fields: RefCell<Vec<Field<'kind>>>,
 }
 
 impl<'kind> Composite<'kind> {
     pub(crate) fn align_of(&self) -> u16 {
-        self.fields.iter()
+        self.fields.borrow().iter()
             .map(|x| x.kind.size_of())
             .max()
             .unwrap_or_default()
@@ -80,10 +80,10 @@ impl<'kind> Composite<'kind> {
 
     pub(crate) fn size_of_no_end_pad(&self) -> u16 {
         match self.mode {
-            CompositeMode::Product => self.fields.iter().fold(0, |acc,x|
+            CompositeMode::Product => self.fields.borrow().iter().fold(0, |acc,x|
                 acc + x.kind.size_of() + x.kind.align_pad(acc)
             ),
-            CompositeMode::Sum => self.fields.iter()
+            CompositeMode::Sum => self.fields.borrow().iter()
                 .map(|x| x.kind.size_of())
                 .max()
                 .unwrap_or_default()
@@ -106,7 +106,7 @@ impl<'kind> Composite<'kind> {
 
         let mut result = 0;
 
-        for field in self.fields.iter() {
+        for field in self.fields.borrow().iter() {
             result += field.kind.align_pad(result);
             let name = match field.name.as_ref() {
                 Some(name) => name,
@@ -125,21 +125,21 @@ impl<'kind> Composite<'kind> {
     pub fn base_fields(&self, address: &mut usize) -> Vec<(usize,Primitive)> {
 
         if self.mode == CompositeMode::Sum {
-            if self.fields.is_empty() {
+            if self.fields.borrow().is_empty() {
                 return Vec::new();
             } else {
-                return self.fields[0].kind.base_fields(address);
+                return self.fields.borrow()[0].kind.base_fields(address);
             }
         }
 
-        self.fields.iter()
+        self.fields.borrow().iter()
             .map(|f| f.kind.base_fields(address))
             .flatten()
             .collect()
     }
 
     pub(crate) fn type_of(&'kind self, field_name: &str) -> Option<&'kind Kind<'kind>> {
-        self.fields.iter()
+        self.fields.borrow().iter()
             .find(|field| field.name.as_deref() == Some(field_name))
             .map(|field| field.kind)
     }

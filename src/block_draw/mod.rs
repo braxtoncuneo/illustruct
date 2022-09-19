@@ -194,19 +194,19 @@ impl BlockDrawSpec {
 
 
 
-    pub fn name_width<'kind>(&self, kind: &'kind Kind<'kind> ) -> f32 {
+    pub fn name_width<'kind>(&self, kind: &Kind<'kind> ) -> f32 {
         self.tpad_width(&kind.to_string())
     }
 
-    pub fn composite_member_width<'kind>(&self,comp: &'kind Composite<'kind>) -> f32 {
+    pub fn composite_member_width<'kind>(&self,comp: &Composite<'kind>) -> f32 {
         match comp.mode {
-            CompositeMode::Product => comp.fields.iter()
+            CompositeMode::Product => comp.fields.borrow().iter()
                 .enumerate()
                 .map(|(i, f)| self.field_width(f, i==0))
                 .max_by(f32::total_cmp)
                 .unwrap_or(0.0)
                     + self.prong_xpad,
-            CompositeMode::Sum => comp.fields.iter()
+            CompositeMode::Sum => comp.fields.borrow().iter()
                 .map(|x| self.field_width(x, false)
                     + self.union_xpad
                     + self.prong_width
@@ -236,7 +236,7 @@ impl BlockDrawSpec {
         first_width.max(last_width)
     }
 
-    pub fn member_width<'kind>(&self,kind: &'kind Kind<'kind>) -> f32 {
+    pub fn member_width<'kind>(&self,kind: &Kind<'kind>) -> f32 {
         match kind {
             Kind::Composite(comp)  => self.composite_member_width(comp),
             Kind::Array    (array) => self.array_member_width(array),
@@ -434,12 +434,12 @@ impl BlockDrawSpec {
         let fields = match kind {
             Kind::Composite(comp) => match comp.mode {
                 CompositeMode::Product => self.plan_product_fields(
-                    &comp.fields,
+                    &*comp.fields.borrow(),
                     mins,
                     self.member_width(kind)
                 ),
                 CompositeMode::Sum => self.plan_sum_fields(
-                    &comp.fields,
+                    &*comp.fields.borrow(),
                     mins
                 ),
             },
@@ -497,7 +497,7 @@ impl BlockDrawSpec {
         let fields = match kind {
             Kind::Composite(comp) => match comp.mode {
                 CompositeMode::Product => self.plan_product_fields(
-                    &comp.fields,
+                    &*comp.fields.borrow(),
                     mins,
                     width,
                 ),

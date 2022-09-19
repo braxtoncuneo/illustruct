@@ -17,6 +17,9 @@ name = "align_illust"
 [[example]]
 name = "struct"
 
+[[example]]
+name = "self_ref"
+
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
@@ -25,3 +28,4 @@ unicode-width = "0.1.5"
 petgraph = "0.6.2"
 pod = "0.5.0"
 pom = "3.2.0"
+typed-arena = "2.0.1"

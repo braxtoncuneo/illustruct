@@ -1,6 +1,6 @@
 #![allow(dead_code)]
 
-use std::{iter, str::FromStr};
+use std::{iter, str::FromStr, cell::RefCell};
 
 use svg::{node::element::{Group, Text, Path, path::Data,}, Document};
 use pod::Pod;
@@ -58,7 +58,7 @@ impl <'kind> MemRibbon <'kind> {
         let comp = Composite {
             name: name.to_string(),
             mode: CompositeMode::Product,
-            fields,
+            fields: RefCell::new(fields),
         };
 
         let align = comp.align_of() as usize;
@@ -75,7 +75,7 @@ impl <'kind> MemRibbon <'kind> {
     }
 
 
-    pub fn get(&self, access: Access) -> Result<PlaceValue,access::Error> {
+    pub fn get(&'kind self, access: Access) -> Result<PlaceValue,access::Error> {
         use MemRibbonSegment::*;
         use access::AccessUnit::*;
 
@@ -166,7 +166,7 @@ impl <'kind> MemRibbon <'kind> {
 
     }
 
-    pub fn at(&self, access_string: &str) -> PlaceValue {
+    pub fn at(&'kind self, access_string: &str) -> PlaceValue {
         self.get(access_string.parse().unwrap()).unwrap()
     }
 
@@ -225,7 +225,7 @@ impl <'kind> MemRibbon <'kind> {
     }
 
 
-    pub fn draw(&self, position: Vec2, spec: &BlockDrawSpec, show_data: bool, show_kind: bool) -> (Group,(Vec2,Vec2)) {
+    pub fn draw(&'kind self, position: Vec2, spec: &'kind BlockDrawSpec, show_data: bool, show_kind: bool) -> (Group,(Vec2,Vec2)) {
         use MemRibbonSegment::*;
 
         let mut nozzle = Nozzle {
@@ -256,7 +256,7 @@ impl <'kind> MemRibbon <'kind> {
         (result,(nozzle.mins,nozzle.maxs))
     }
 
-    pub fn save_svg<T: ToString>(&self,file_name: T, spec:&BlockDrawSpec, show_data: bool, show_kind: bool) {
+    pub fn save_svg<T: ToString>(&'kind self,file_name: T, spec:&'kind BlockDrawSpec, show_data: bool, show_kind: bool) {
         let (group,bounds) = self.draw(Vec2::default(), spec, show_data, show_kind);
 
         let document = Document::new()
@@ -441,11 +441,11 @@ impl Nozzle {
     }
 
 
-    pub fn draw_span(
+    pub fn draw_span<'a>(
         &mut self, 
         ribbon: &MemRibbon,
-        spec:   &BlockDrawSpec, 
-        comp:   &Composite<'_>,
+        spec:   &'a BlockDrawSpec, 
+        comp:   &'a Composite<'a>,
         width:   f32,
     ) -> Group {
 
@@ -456,7 +456,7 @@ impl Nozzle {
 
         //let right_grp = spec.make_span_plan(kind, mins, width);
 
-        for field in comp.fields.iter() {
+        for field in comp.fields.borrow().iter() {
             let padding = field.kind.align_pad(start_address as u16);
             let field_address = start_address + padding as usize;
             let span_size = ( padding + field.kind.size_of() ) as usize;

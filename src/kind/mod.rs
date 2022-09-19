@@ -1,6 +1,6 @@
 #![allow(dead_code)]
 
-use std::fmt::{Display, self};
+use std::{fmt::{Display, self}, cell::RefCell};
 use pod::Pod;
 
 use crate::{
@@ -179,7 +179,11 @@ impl<'kind> Kind<'kind> {
     }
 
     pub fn comp<T: ToString>(name: T, mode: CompositeMode, fields: Vec<Field<'kind>>) -> Self {
-        Kind::Composite(Composite { name: name.to_string(), mode, fields })
+        Kind::Composite(Composite {
+            name: name.to_string(),
+            mode,
+            fields: RefCell::new(fields)
+        })
     }
 
     pub fn array(kind: &'kind Kind<'kind>, size: usize) -> Self {
@@ -289,6 +293,20 @@ impl<'kind> Kind<'kind> {
         fields.push(Field::anon(self));
         result.span("",fields);
         result
+    }
+
+    fn get_fields(&'kind self) -> Option<&'kind RefCell<Vec<Field<'kind>>>> {
+        match self {
+            Kind::Composite(comp) => Some(&comp.fields),
+            _ => panic!("Cannot treat kind '{}' as composite",self),
+        }
+    }
+
+    pub fn add_field<T:ToString>(&'kind self, name:T, kind: &'kind Kind<'kind>) {
+        self.get_fields().unwrap().borrow_mut().push(Field{
+            name: Some(name.to_string()),
+            kind,
+        })
     }
 
 }
