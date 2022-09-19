@@ -14,6 +14,9 @@ name = "RAM_illust"
 [[example]]
 name = "align_illust"
 
+[[example]]
+name = "struct"
+
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]

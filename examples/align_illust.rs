@@ -39,19 +39,62 @@ fn main() {
         chamfer_size : 12.0
     };
 
-    let mut ram_rib = MemRibbon::new(0);
-    ram_rib.span(
+    let mut align_rib = MemRibbon::new(0);
+    align_rib.span(
         "RAM_start",
         vec![
             Field::new("byte_A",&uint8_t),
             Field::new("byte_B",&uint8_t),
-            //Field::new("byte_C",&uint8_t),
             Field::new(  "two_bytes",&uint16_t),
             Field::new( "four_bytes",&uint32_t),
             Field::new("eight_bytes",&uint64_t),
         ]
     );
 
-    ram_rib.save_svg("align_illust.svg",spec,false,true);
+
+    let mut unalign_rib = MemRibbon::new(0);
+    unalign_rib.span(
+        "RAM_start",
+        vec![
+            Field::new("byte_A",&uint8_t),
+            Field::new("byte_B",&uint8_t),
+            Field::new("byte_C",&uint8_t),
+            Field::new(  "two_bytes",&uint16_t),
+            Field::new( "four_bytes",&uint32_t),
+            Field::new("eight_bytes",&uint64_t),
+        ]
+    );
+    
+
+    align_rib  .save_svg("align_illust.svg",spec,false,true);
+    unalign_rib.save_svg("unalign_illust.svg",spec,false,true);
+
+
+    let compact_struct = Kind::comp(
+        "CompactStruct",
+        CompositeMode::Product,
+        vec![
+            Field::new(" first_byte",&uint8_t),
+            Field::new("second_byte",&uint8_t),
+            Field::new("  two_bytes",&uint16_t),
+        ],
+    );
+
+
+    let padded_struct = Kind::comp(
+        "PaddedStruct",
+        CompositeMode::Product,
+        vec![
+            Field::new(" first_byte",&uint8_t),
+            Field::new("  two_bytes",&uint16_t),
+            Field::new("second_byte",&uint8_t),
+        ],
+    );
+
+    compact_struct.into_ribbon()
+        .save_svg("compact_struct.svg", spec, false, true);
+    padded_struct.into_ribbon()
+        .save_svg("padded_struct.svg", spec, false, true);
+
 
 }

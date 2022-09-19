@@ -483,4 +483,50 @@ impl BlockDrawSpec {
             graph_index: None,
         }
     }
+
+
+    pub fn make_span_plan<'kind>(
+        &'kind self,
+        kind: &'kind Kind<'kind>,
+        mins: Vec2,
+        width: f32,
+    ) -> block_plan::BlockDiagPlan<'kind>
+    {
+        let block_height = self.height(kind);
+
+        let fields = match kind {
+            Kind::Composite(comp) => match comp.mode {
+                CompositeMode::Product => self.plan_product_fields(
+                    &comp.fields,
+                    mins,
+                    width,
+                ),
+                _ => unreachable!(),
+            },
+            _ => unreachable!(),
+        };
+
+        let gapped = true;
+
+        let maxs = mins + Vec2::new(width,block_height);
+
+        let member_width = self.member_width(kind);
+        let prong_padding = if gapped { self.prong_xpad } else { 0.0 };
+        let head_offset = member_width + prong_padding;
+        let head = Group::new();
+
+        block_plan::BlockDiagPlan {
+            spec: self,
+            head,
+            head_offset,
+            relative_pos: None,
+            body_plan: None,
+            mins,
+            maxs,
+            kind,
+            sub_blocks: fields,
+            graph_index: None,
+        }
+    }
+
 }

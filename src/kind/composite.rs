@@ -19,6 +19,10 @@ impl<'a> Field<'a> {
         Self { name: Some(name.to_string()), kind }
     }
 
+    pub fn anon(kind: &'a Kind<'a> ) -> Self {
+        Self { name: None, kind }
+    }
+
     pub fn make_plan(&self, spec: &'a BlockDrawSpec, mins: Vec2, width: Option<f32>, notch: bool) -> BlockDiagPlan<'a> {
         let width = width.unwrap_or_else(|| spec.field_width(self, notch));
         let mut plan = spec.make_plan(self.kind, mins, Some(width), notch);

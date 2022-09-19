@@ -199,6 +199,7 @@ impl<'kind> BlockDiagPlan<'kind> {
     }
 
 
+    /*
     pub fn member_svg_recurse(&mut self, color_map: &HashMap<NodeIndex, usize>) -> Group {
         let base_pos = self.relative_pos.unwrap_or_default();
 
@@ -218,5 +219,5 @@ impl<'kind> BlockDiagPlan<'kind> {
         let color_map = crate::graph::block_graph_color(&color_graph);
         self.member_svg_recurse(&color_map)
     }
-
+    */
 }

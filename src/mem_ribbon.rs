@@ -444,9 +444,9 @@ impl Nozzle {
     pub fn draw_span(
         &mut self, 
         ribbon: &MemRibbon,
-        spec: &BlockDrawSpec, 
-        comp: &Composite<'_>,
-        width: f32,
+        spec:   &BlockDrawSpec, 
+        comp:   &Composite<'_>,
+        width:   f32,
     ) -> Group {
 
         let mut start_address = self.address;
@@ -454,6 +454,7 @@ impl Nozzle {
 
         let mut byte_noz = self.subnozzle(self.position);
 
+        //let right_grp = spec.make_span_plan(kind, mins, width);
 
         for field in comp.fields.iter() {
             let padding = field.kind.align_pad(start_address as u16);

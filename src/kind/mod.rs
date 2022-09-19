@@ -282,6 +282,15 @@ impl<'kind> Kind<'kind> {
             err.with_context(self.category(), trace.field_name.as_str())
         )
     }
+
+    pub fn into_ribbon(&'kind self) -> MemRibbon<'kind> {
+        let mut result = MemRibbon::new(0);
+        let mut fields = Vec::new();
+        fields.push(Field::anon(self));
+        result.span("",fields);
+        result
+    }
+
 }
 
 impl fmt::Display for Kind<'_> {
