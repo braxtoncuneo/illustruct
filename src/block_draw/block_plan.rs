@@ -1,7 +1,12 @@
 use std::collections::HashMap;
 
-use crate::{kind::{Kind, composite::CompositeMode}, block_draw::util::Translate};
-use super::{BlockDrawSpec, util::{BlockAdjSpan, BlockAdjListPairIter, Vec2}};
+use crate::{
+    kind::{Kind, composite::CompositeMode, CType},
+    block_draw::{
+        BlockDrawSpec,
+        util::{BlockAdjSpan, BlockAdjListPairIter, Vec2, Translate},
+    },
+};
 
 use petgraph::{graph::NodeIndex, Undirected, stable_graph::StableGraph};
 use svg::node::element::Group;
@@ -32,9 +37,11 @@ impl<'kind> BlockDiagPlan<'kind> {
     ) {
         if self.body_plan.is_some() {
             let index = *self.graph_index.get_or_insert_with(|| graph.add_node(()));
+
             if let Some(p_idx) = parent {
                 graph.add_edge(p_idx, index, ());
             };
+
             for block in self.sub_blocks.iter_mut() {
                 block.setup_nodes(graph, Some(index))
             }
@@ -67,7 +74,7 @@ impl<'kind> BlockDiagPlan<'kind> {
         &self,
         graph: &mut StableGraph<(), (), Undirected>,
         left_side: Option<NodeIndex>,
-    ) -> (Vec<BlockAdjSpan>,Vec<BlockAdjSpan>)
+    ) -> (Vec<BlockAdjSpan>, Vec<BlockAdjSpan>)
     {
         let mut interface: Option<(Vec<BlockAdjSpan>,Vec<BlockAdjSpan>)> = None;
         for block in &self.sub_blocks {
@@ -92,9 +99,9 @@ impl<'kind> BlockDiagPlan<'kind> {
 
     pub fn block_sum_row(
         &self,
-        graph: &mut StableGraph<(),(),Undirected>,
+        graph: &mut StableGraph<(), (), Undirected>,
         left_side: Option<NodeIndex>,
-    ) -> (Vec<BlockAdjSpan>,Vec<BlockAdjSpan>)
+    ) -> (Vec<BlockAdjSpan>, Vec<BlockAdjSpan>)
     {
         let index = self.graph_index.unwrap();
         let mut top = Vec::<BlockAdjSpan>::new();
@@ -125,7 +132,7 @@ impl<'kind> BlockDiagPlan<'kind> {
                     bot.push(BlockAdjSpan {
                         index,
                         min: last.max,
-                        max: first.min
+                        max: first.min,
                     });
                 }
             }
@@ -139,7 +146,7 @@ impl<'kind> BlockDiagPlan<'kind> {
         &self,
         graph: &mut StableGraph<(), (), Undirected>,
         left_side: Option<NodeIndex>,
-    ) -> (Vec<BlockAdjSpan>,Vec<BlockAdjSpan>)
+    ) -> (Vec<BlockAdjSpan>, Vec<BlockAdjSpan>)
     {
         if self.kind.size_of() == 1 {
             return Default::default();
@@ -168,15 +175,15 @@ impl<'kind> BlockDiagPlan<'kind> {
 
     pub fn into_svg_recurse(&mut self, color_map: &HashMap<NodeIndex, usize>) -> Group {
         //let colors : [&str;8] = ["red","green","blue","magenta","cyan","yellow","grey","white" ];
-        let colors : [&str;8] = ["#DDD","#BBB","#999","#777","#555","#333","#111","#222" ];
+        let colors: [&str;8] = ["#DDD","#BBB","#999","#777","#555","#333","#111","#222" ];
 
         let base_pos = self.relative_pos.unwrap_or_default();
 
         let base_group = self.body_plan.as_ref()
-            .map(|body_plan| {
+            .map(|&BlockBodyPlan { block_width, notch }| {
                 let tone = colors[color_map[&self.graph_index.unwrap()]];
 
-                self.spec.draw_block(self.kind, body_plan.block_width, body_plan.notch)
+                self.spec.draw_block(self.kind, block_width, notch)
                     .map(|group| group.set("fill", tone))
                     .unwrap_or_default()
             })
@@ -184,7 +191,7 @@ impl<'kind> BlockDiagPlan<'kind> {
             .set("transform", Translate::from(base_pos));
 
         self.sub_blocks.iter_mut()
-            .fold(base_group, |b,sub| b.add(sub.into_svg_recurse(color_map)))
+            .fold(base_group, |b, sub| b.add(sub.into_svg_recurse(color_map)))
             .add(self.head.clone()
                 .set("transform",Translate(self.head_offset,0f32))
         )
@@ -197,7 +204,6 @@ impl<'kind> BlockDiagPlan<'kind> {
         let color_map = crate::graph::block_graph_color(&color_graph);
         self.into_svg_recurse(&color_map)
     }
-
 
     /*
     pub fn member_svg_recurse(&mut self, color_map: &HashMap<NodeIndex, usize>) -> Group {

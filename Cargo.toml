@@ -9,7 +9,7 @@ name = "illustruct"
 path = "src/lib.rs"
 
 [[example]]
-name = "RAM_illust"
+name = "ram_illust"
 
 [[example]]
 name = "align_illust"
@@ -29,3 +29,4 @@ petgraph = "0.6.2"
 pod = "0.5.0"
 pom = "3.2.0"
 typed-arena = "2.0.1"
+enum_dispatch = "0.3.8"

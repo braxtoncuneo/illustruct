@@ -1,14 +1,17 @@
 #![allow(dead_code)]
 
-use std::arch::x86_64::_SIDD_CMP_EQUAL_EACH;
-use std::collections::{VecDeque,vec_deque};
-use std::fmt::{self, Display};
-use std::str::FromStr;
+use std::{
+    collections::VecDeque,
+    fmt,
+    str::FromStr,
+};
 
-use crate::kind::Kind;
+use crate::{
+    kind::Kind,
+    mem_ribbon::MemRibbon,
+};
 
-use crate::mem_ribbon::MemRibbon;
-
+mod parse;
 
 #[non_exhaustive]
 #[derive(Clone)]
@@ -38,13 +41,12 @@ impl MemByte {
 impl fmt::Display for MemByte {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            MemByte::Undefined   => write!(f,"----"),
-            MemByte::OutOfBounds => write!(f,"OOB"),
-            MemByte::Byte(x)     => write!(f,"{:08b}",x),
+            MemByte::Undefined   => write!(f, "----"),
+            MemByte::OutOfBounds => write!(f, "OOB"),
+            MemByte::Byte(x)     => write!(f, "{x:08b}"),
         }
     }
 }
-
 
 pub struct PlaceValue<'kind> {
     pub kind: &'kind Kind <'kind>,
@@ -71,29 +73,27 @@ impl AccessUnit {
 }
 
 #[derive(Debug)]
-pub struct Access {
-    pub(crate) sequence: VecDeque<AccessUnit>,
-}
+pub struct AccessPath(pub VecDeque<AccessUnit>);
 
-impl Access {
+impl AccessPath {
     pub fn new(base: &str) -> Self {
         let mut sequence = VecDeque::new();
         sequence.push_back(AccessUnit::Field(base.into()));
-        Self { sequence }
+        Self(sequence)
     }
 
     pub fn deref(mut self) -> Self {
-        self.sequence.push_back(AccessUnit::Index(0usize));
+        self.0.push_back(AccessUnit::Index(0usize));
         self
     }
 
-    pub fn index(mut self,idx: usize) -> Self {
-        self.sequence.push_back(AccessUnit::Index(idx));
+    pub fn index(mut self, idx: usize) -> Self {
+        self.0.push_back(AccessUnit::Index(idx));
         self
     }
 
-    pub fn field(mut self,fname: &str) -> Self {
-        self.sequence.push_back(AccessUnit::Field(fname.to_string()));
+    pub fn field(mut self, fname: &str) -> Self {
+        self.0.push_back(AccessUnit::Field(fname.to_string()));
         self
     }
 
@@ -103,13 +103,29 @@ impl Access {
 
 }
 
-impl <T> From<T> for Access 
-where T: Into<VecDeque<AccessUnit>> {
+impl <T: Into<VecDeque<AccessUnit>>> From<T> for AccessPath {
     fn from(collection: T) -> Self {
-        Access{ sequence: collection.into() }
+        AccessPath(collection.into())
     }
 }
 
+impl<T> PartialEq<T> for AccessPath
+where VecDeque<AccessUnit>: PartialEq<T> {
+    fn eq(&self, other: &T) -> bool {
+        self.0 == *other
+    }
+}
+
+impl FromStr for AccessPath {
+    type Err = pom::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        // Bindings required for borrow checker
+        let chars = s.chars().collect::<Vec<_>>();
+        let parser = parse::access_expr();
+        parser.parse(&chars)
+    }
+}
 
 pub struct AccessTrace <'kind> {
     pub ribbon: &'kind MemRibbon <'kind>,
@@ -119,9 +135,9 @@ pub struct AccessTrace <'kind> {
 }
 
 pub struct Error<'a> {
-    pub(crate) field_name: String,
-    pub(crate) kind: ErrorKind<'a>,
-    pub(crate) context: Option<String>,
+    pub field_name: String,
+    pub kind: ErrorKind<'a>,
+    pub context: Option<String>,
 }
 
 impl<'a> Error<'a> {
@@ -129,8 +145,8 @@ impl<'a> Error<'a> {
         Self { field_name, kind, context: None }
     }
 
-    pub fn with_context(mut self, category: &dyn fmt::Display, field_name: &str) -> Self {
-        self.context = Some(format!(" within {} {}", category, field_name));
+    pub fn with_context(mut self, description: &dyn fmt::Display, field_name: &str) -> Self {
+        self.context = Some(format!(" within {} {}", description, field_name));
         self
     }
 }
@@ -166,10 +182,9 @@ impl fmt::Display for Error<'_> {
 
 impl fmt::Debug for Error<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f,"{}",self)
+        write!(f,"{}", self)
     }
 }
-
 
 pub enum ErrorKind<'a> {
     Operation {
@@ -197,90 +212,69 @@ pub enum ErrorKind<'a> {
 
 #[cfg(test)]
 mod test {
-    use super::{Access, AccessUnit};
+    use super::{AccessPath, AccessUnit};
 
     #[test]
     fn single(){
         assert_eq!(
-            Access::new("abc").sequence,
-            vec![AccessUnit::Field("abc".to_string())],
+            AccessPath::new("abc"),
+            &[AccessUnit::Field("abc".to_string())],
         );
     }
-
 
     #[test]
     fn field(){
-        let buf = Access::new("abc").field("def");
         assert_eq!(
-            buf.sequence,
-            vec![
+            AccessPath::new("abc").field("def"),
+            &[
                 AccessUnit::Field("abc".to_string()),
-                AccessUnit::Field("def".to_string())
+                AccessUnit::Field("def".to_string()),
             ],
         );
     }
-
 
     #[test]
     fn multi_field(){
-        let buf = Access::new("abc").field("def").field("ghi");
-
         assert_eq!(
-            buf.sequence,
-            vec![
+            AccessPath::new("abc").field("def").field("ghi"),
+            &[
                 AccessUnit::Field("abc".to_string()),
                 AccessUnit::Field("def".to_string()),
-                AccessUnit::Field("ghi".to_string())
+                AccessUnit::Field("ghi".to_string()),
             ],
         );
     }
 
-
     #[test]
     fn deref(){
-        let buf = Access::new("abc").deref();
-        assert_eq!(buf.sequence,vec![
-            AccessUnit::Field("abc".to_string()),
-            AccessUnit::Deref
-        ]);
+        assert_eq!(
+            AccessPath::new("abc").deref(),
+            &[
+                AccessUnit::Field("abc".to_string()),
+                AccessUnit::Deref,
+            ]
+        );
     }
-
 
     #[test]
     fn index(){
-        let buf = Access::new("abc").index(2usize);
-        assert_eq!(buf.sequence,vec![
-            AccessUnit::Field("abc".to_string()),
-            AccessUnit::Index(2usize)
-        ]);
+        assert_eq!(
+            AccessPath::new("abc").index(2),
+            &[
+                AccessUnit::Field("abc".to_string()),
+                AccessUnit::Index(2),
+            ],
+        );
     }
-
 
     #[test]
     fn arrow(){
-        let buf = Access::new("abc").arrow("def");
-        assert_eq!(buf.sequence,vec![
-            AccessUnit::Field("abc".to_string()),
-            AccessUnit::Arrow("def".to_string())
-        ]);
-    }
-
-}
-
-
-mod parse;
-
-
-impl FromStr for Access
-{
-    type Err = pom::Error;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let char_vec : Vec<char>= s.chars().collect();
-        let result = parse::access_expr().parse(&char_vec.as_slice());
-        result
+        assert_eq!(
+            AccessPath::new("abc").arrow("def"),
+            &[
+                AccessUnit::Field("abc".to_string()),
+                AccessUnit::Arrow("def".to_string()),
+            ],
+        );
     }
 }
-
-
-

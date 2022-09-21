@@ -7,12 +7,12 @@ use svg::node::element::{
     path::Data
 };
 
-use crate::kind::{Kind, composite::{CompositeMode, Field, Composite}, array::Array};
-
-use self::util::{Vec2, Translate};
+use crate::kind::{Kind, composite::{CompositeMode, Field, Composite}, array::Array, CType};
 
 pub mod block_plan;
 pub mod util;
+
+use util::Vec2;
 
 pub struct BlockDrawSpec {
     pub char_dims: Vec2,
@@ -33,7 +33,6 @@ impl BlockDrawSpec {
     pub fn line_height (&self) -> f32 {
         self.label_height() + 2.0 * self.label_pads.y
     }
-
 
     fn bare_width(&self,text: &str) -> f32 {
         text.width_cjk() as f32 * self.char_dims.x
@@ -192,8 +191,6 @@ impl BlockDrawSpec {
         Group::new().add(path).add(text_node)
     }
 
-
-
     pub fn name_width<'kind>(&self, kind: &Kind<'kind> ) -> f32 {
         self.tpad_width(&kind.to_string())
     }
@@ -216,38 +213,31 @@ impl BlockDrawSpec {
         }
     }
 
-    pub fn array_member_width<'kind>(&self,array: &Array<'kind>) -> f32 {        
-        if array.size == 0 {
-            return 0.0f32;
+    pub fn array_member_width(&self, Array { kind, size }: Array) -> f32 {
+        if size == 0 {
+            return 0.0;
         }
 
-        let first_field = Field {
-            name: Some(0usize.to_string()),
-            kind: array.kind,
-        };
+        let first_field = Field::new(0, kind);
         let first_width = self.field_width(&first_field, true) + self.prong_xpad;
-        
-        let last_field = Field {
-            name: Some((array.size-1).to_string()),
-            kind: array.kind,
-        };
+
+        let last_field = Field::new(size - 1, kind);
         let last_width = self.field_width(&last_field, false) + self.prong_xpad;
 
         first_width.max(last_width)
     }
 
-    pub fn member_width<'kind>(&self,kind: &Kind<'kind>) -> f32 {
+    pub fn member_width<'kind>(&self, kind: &Kind<'kind>) -> f32 {
         match kind {
-            Kind::Composite(comp)  => self.composite_member_width(comp),
-            Kind::Array    (array) => self.array_member_width(array),
+            Kind::Composite(comp) => self.composite_member_width(comp),
+            Kind::Array(array) => self.array_member_width(*array),
             _ => 0.0,
         }
     }
 
     pub fn unlabeled_width(&self, kind: &Kind<'_>, _notch: bool) -> f32 {
         let prong_width = match kind {
-            Kind::Composite(_) => self.prong_width,
-            Kind::Array    (_) => self.prong_width,
+            Kind::Composite(_) | Kind::Array(_) => self.prong_width,
             _ => 0.0,
         };
 
@@ -265,7 +255,7 @@ impl BlockDrawSpec {
     }
 
     pub fn field_width(&self, field: &Field, notch: bool) -> f32 {
-        self.unlabeled_width(field.kind,notch)
+        self.unlabeled_width(field.kind, notch)
             + self.label_width(field.name.as_deref().unwrap_or_default())
             + self.label_pads.x * 2f32
     }
@@ -279,22 +269,22 @@ impl BlockDrawSpec {
     ) -> block_plan::BlockDiagPlan<'kind>
     {
         let dims = Vec2::new(
-            width.unwrap_or(self.unlabeled_width(kind,notch)),
+            width.unwrap_or_else(|| self.unlabeled_width(kind, notch)),
             self.height(kind),
         );
 
         block_plan::BlockDiagPlan {
-            spec: &self,
+            spec: self,
             head: self.draw_header(
                 &kind.to_string(),
-                width.unwrap_or(self.unlabeled_width(kind, notch)),
+                width.unwrap_or_else(|| self.unlabeled_width(kind, notch)),
                 notch,
             ),
-            head_offset: 0f32,
+            head_offset: 0.0,
             body_plan: None,
             relative_pos: None,
             mins,
-            maxs: mins+dims,
+            maxs: mins + dims,
             kind,
             sub_blocks: Vec::new(),
             graph_index: None,
@@ -303,7 +293,7 @@ impl BlockDrawSpec {
 
     pub fn plan_array_fields<'kind>(
         &'kind self,
-        array: &Array<'kind>,
+        Array { size, kind }: Array<'kind>,
         mins: Vec2,
         width: f32,
     ) -> Vec<block_plan::BlockDiagPlan<'kind>>
@@ -312,13 +302,8 @@ impl BlockDrawSpec {
         let mut offset = 0;
         let mut deltas = Vec2::default();
 
-        for index in 0..array.size {
-
-            let field = Field{
-                name: Some(index.to_string()),
-                kind: array.kind,
-            };
-
+        for index in 0..size {
+            let field = Field::new(index, kind);
             let pad = field.kind.align_pad(offset);
             let pad_height = pad as f32 * self.line_height();
             let size = field.kind.size_of();
@@ -392,7 +377,7 @@ impl BlockDrawSpec {
         let mut deltas = Vec2::default();
 
         for f in fields {
-            let w = self.field_width(&f,false)
+            let w = self.field_width(f, false)
                 + self.union_xpad
                 + self.prong_width
                 + self.prong_xpad;
@@ -423,7 +408,7 @@ impl BlockDrawSpec {
         notch: bool,
     ) -> block_plan::BlockDiagPlan<'kind>
     {
-        let block_width = width.unwrap_or(self.unlabeled_width(kind,notch));
+        let block_width = width.unwrap_or_else(|| self.unlabeled_width(kind, notch));
         let block_height = self.height(kind);
 
         let body_plan = block_plan::BlockBodyPlan {
@@ -434,29 +419,24 @@ impl BlockDrawSpec {
         let fields = match kind {
             Kind::Composite(comp) => match comp.mode {
                 CompositeMode::Product => self.plan_product_fields(
-                    &*comp.fields.borrow(),
+                    &comp.fields.borrow(),
                     mins,
                     self.member_width(kind)
                 ),
                 CompositeMode::Sum => self.plan_sum_fields(
-                    &*comp.fields.borrow(),
+                    &comp.fields.borrow(),
                     mins
                 ),
             },
             Kind::Array(array) => self.plan_array_fields(
-                    array,
+                    *array,
                     mins,
                     self.member_width(kind)
                 ),
             _ => Default::default(),
         };
 
-        let gapped = match kind {
-            Kind::Composite(_) => true,
-            Kind::Array    (_) => true,
-            _ => false,
-        };
-
+        let gapped = matches!(kind, Kind::Composite(_) | Kind::Array(_));
 
         let maxs = mins + Vec2::new(block_width,block_height);
 
@@ -497,7 +477,7 @@ impl BlockDrawSpec {
         let fields = match kind {
             Kind::Composite(comp) => match comp.mode {
                 CompositeMode::Product => self.plan_product_fields(
-                    &*comp.fields.borrow(),
+                    &comp.fields.borrow(),
                     mins,
                     width,
                 ),

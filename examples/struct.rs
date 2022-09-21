@@ -3,19 +3,16 @@
 use illustruct::{
     kind::{
         Kind,
-        Primitive,
-        PrimValue,
+        primitive::Primitive,
         composite::{
             Field,
-            CompositeMode,
-        }, reference::ReferenceMode,
+            CompositeMode, Composite,
+        },
     },
     block_draw::{
         BlockDrawSpec,
         util::Vec2,
     },
-    mem_ribbon::MemRibbon,
-    access::Access,
 };
 
 
@@ -38,7 +35,7 @@ fn main() {
         chamfer_size : 6.0
     };
 
-    Kind::comp(
+    Kind::from(Composite::new(
         "RPG_Character",
         CompositeMode::Product,
         vec![
@@ -49,23 +46,24 @@ fn main() {
             Field::new("experience",&uint16_t),
             Field::new("hit_points",&uint16_t),
         ],
-    ).into_ribbon()
-    .save_svg("rpg.svg", spec, false, true);
+    ))
+        .into_ribbon()
+        .save_svg("rpg.svg", spec, false, true);
 
-    let point = Kind::comp(
+    let point = Kind::from(Composite::new(
         "Point",
         CompositeMode::Product,
         vec![
             Field::new("x",&float),
             Field::new("y",&float),
         ],
-    );
-    
+    ));
+
     let point_rib = point.into_ribbon();
     point_rib.save_svg("point.svg", spec, false, true);
 
 
-    let tri = Kind::comp(
+    let tri = Kind::from(Composite::new(
         "Triangle",
         CompositeMode::Product,
         vec![
@@ -73,9 +71,8 @@ fn main() {
             Field::new("b",&point),
             Field::new("c",&point),
         ],
-    );
+    ));
+
     let tri_rib = tri.into_ribbon();
     tri_rib.save_svg("triangle.svg", spec, false, true);
-
-
 }

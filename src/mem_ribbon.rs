@@ -1,14 +1,13 @@
 #![allow(dead_code)]
 
-use std::{iter, str::FromStr, cell::RefCell};
+use std::{iter, cell::RefCell};
 
 use svg::{node::element::{Group, Text, Path, path::Data,}, Document};
-use pod::Pod;
 
 use crate::{
     block_draw::{util::{Vec2, Translate}, BlockDrawSpec},
-    kind::{PrimValue, composite::{Field, Composite, CompositeMode}, Primitive},
-    access::{self, MemByte, PlaceValue, AccessTrace, Access},
+    kind::{primitive::{Primitive, PrimValue}, composite::{Field, Composite, CompositeMode}, CType},
+    access::{self, MemByte, PlaceValue, AccessTrace, AccessPath},
 };
 
 
@@ -26,9 +25,6 @@ pub struct MemRibbon <'kind> {
     pub segments: Vec<MemRibbonSegment<'kind>>,
     pub data: Vec<MemByte>,
 }
-
-
-
 
 impl <'kind> MemRibbon <'kind> {
     pub fn new(base_adr: usize) -> Self {
@@ -51,8 +47,7 @@ impl <'kind> MemRibbon <'kind> {
         self.data.extend(iter::repeat(MemByte::Undefined).take(offset));
     }
 
-    pub fn span<T: ToString>(&mut self, name: T, fields: Vec<Field<'kind>> ) {
-
+    pub fn span<T: ToString>(&mut self, name: T, fields: Vec<Field<'kind>>) {
         let end_adr = self.base_adr + self.data.len();
 
         let comp = Composite {
@@ -71,42 +66,36 @@ impl <'kind> MemRibbon <'kind> {
         let size = comp.size_of_no_end_pad() as usize;
         self.data.extend(iter::repeat(MemByte::Undefined).take(size));
         self.segments.push(MemRibbonSegment::Span(comp));
-
     }
 
-
-    pub fn get(&'kind self, access: Access) -> Result<PlaceValue,access::Error> {
+    pub fn get(&'kind self, access: AccessPath) -> Result<PlaceValue, access::Error> {
         use MemRibbonSegment::*;
         use access::AccessUnit::*;
 
-        let mut access = access.sequence;
+        let mut access = access.0;
 
         let span_name = match access.pop_front() {
-            Some(Field(field_name)) => field_name.clone(),
-            Some(op) => {
-                let op_str = op.op_str();
-                return  Err(access::Error{
-                    field_name: "MemRibbon".to_string(),
-                    kind: access::ErrorKind::RibbonOp { op: op.op_str() },
-                    context: None,
-                });
-            },
-            None => {
-                return  Err(access::Error{
-                    field_name: "MemRibbon".to_string(),
-                    kind: access::ErrorKind::DirectAccess,
-                    context: None,
-                });
-            },
+            Some(Field(field_name)) => field_name,
+            Some(op) => return Err(access::Error {
+                field_name: "MemRibbon".to_string(),
+                kind: access::ErrorKind::RibbonOp { op: op.op_str() },
+                context: None,
+            }),
+            None => return Err(access::Error {
+                field_name: "MemRibbon".to_string(),
+                kind: access::ErrorKind::DirectAccess,
+                context: None,
+            }),
         };
 
         let mut address = self.base_adr;
         let mut span_comp = None;
+
         for seg in self.segments.iter() {
             address += match seg {
                 Chop(_) => 0,
                 Skip(skip,_) => *skip,
-                Span(comp) => 
+                Span(comp) =>
                     if comp.name == span_name {
                         span_comp = Some(comp);
                         break;
@@ -118,40 +107,31 @@ impl <'kind> MemRibbon <'kind> {
 
         let span_comp = match span_comp {
             Some(comp) => comp,
-            None => {
-                return  Err(access::Error{
-                    field_name: "MemRibbon".to_string(),
-                    kind: access::ErrorKind::SubField { name: span_name },
-                    context: None,
-                });
-            }
-
+            None => return Err(access::Error{
+                field_name: "MemRibbon".to_string(),
+                kind: access::ErrorKind::SubField { name: span_name },
+                context: None,
+            }),
         };
 
 
         let unit = match access.pop_front() {
             Some(unit) => unit,
-            None => {
-                return  Err(access::Error{
-                    field_name: "MemRibbonSpan".to_string(),
-                    kind: access::ErrorKind::DirectAccess,
-                    context: None,
-                });
-            },
+            None => return Err(access::Error{
+                field_name: "MemRibbonSpan".to_string(),
+                kind: access::ErrorKind::DirectAccess,
+                context: None,
+            }),
         };
 
         let (field,name) = match &unit {
             field @ Field(name) => (field,name.clone()),
-            op => {
-                let op_str = op.op_str();
-                return  Err(access::Error{
-                    field_name: "MemRibbonSpan".to_string(),
-                    kind: access::ErrorKind::RibbonOp { op: op.op_str() },
-                    context: None,
-                });
-            },
+            op => return Err(access::Error{
+                field_name: "MemRibbonSpan".to_string(),
+                kind: access::ErrorKind::RibbonOp { op: op.op_str() },
+                context: None,
+            }),
         };
-
 
         let mut trace = AccessTrace {
             ribbon: self,
@@ -160,10 +140,7 @@ impl <'kind> MemRibbon <'kind> {
             field_name: name,
         };
 
-
-        span_comp.access(&field,&mut trace)
-
-
+        span_comp.access(field, &mut trace)
     }
 
     pub fn at(&'kind self, access_string: &str) -> PlaceValue {
@@ -197,26 +174,10 @@ impl <'kind> MemRibbon <'kind> {
             (address - self.base_adr, 0)
         };
 
-        let bytes = match &value {
-            PrimValue::Bool(x) => if *x {&[1]} else {&[0]},
-            PrimValue::Char(x) => x.as_bytes(),
-            PrimValue::U8  (x) => x.as_bytes(),
-            PrimValue::U16 (x) => x.as_bytes(),
-            PrimValue::U32 (x) => x.as_bytes(),
-            PrimValue::U64 (x) => x.as_bytes(),
-            PrimValue::I8  (x)  => x.as_bytes(),
-            PrimValue::I16 (x) => x.as_bytes(),
-            PrimValue::I32 (x) => x.as_bytes(),
-            PrimValue::I64 (x) => x.as_bytes(),
-            PrimValue::F32 (x) => x.as_bytes(),
-            PrimValue::F64 (x) => x.as_bytes(),
-            PrimValue::Size(x) => x.as_bytes(),
-        };
-
         self.data.iter_mut()
             .skip(ribbon_skip)
-            //.map(MemByte::writable)
-            .zip(bytes.iter().skip(prim_skip))
+            // .map(MemByte::writable)
+            .zip(value.bytes().iter().skip(prim_skip))
             .for_each(|(dst,src)|*dst.writable() = *src )
     }
 
@@ -224,13 +185,18 @@ impl <'kind> MemRibbon <'kind> {
         todo!()
     }
 
-
-    pub fn draw(&'kind self, position: Vec2, spec: &'kind BlockDrawSpec, show_data: bool, show_kind: bool) -> (Group,(Vec2,Vec2)) {
+    pub fn draw(
+        &'kind self,
+        position: Vec2,
+        spec: &'kind BlockDrawSpec,
+        show_data: bool,
+        show_kind: bool,
+    ) -> (Group, (Vec2, Vec2)) {
         use MemRibbonSegment::*;
 
         let mut nozzle = Nozzle {
-            address: self.base_adr, 
-            position: position, //Vec2::default(),
+            address: self.base_adr,
+            position, // Vec2::default(),
             mins: position,
             maxs: position,
             show_data,
@@ -253,7 +219,7 @@ impl <'kind> MemRibbon <'kind> {
             })
             .fold(Group::new(), Group::add);
 
-        (result,(nozzle.mins,nozzle.maxs))
+        (result, (nozzle.mins, nozzle.maxs))
     }
 
     pub fn save_svg<T: ToString>(&'kind self,file_name: T, spec:&'kind BlockDrawSpec, show_data: bool, show_kind: bool) {
@@ -265,7 +231,6 @@ impl <'kind> MemRibbon <'kind> {
 
         svg::save(file_name.to_string(), &document).unwrap();
     }
-
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Default)]
@@ -291,10 +256,10 @@ impl Nozzle {
         let wo = w + i * 2f32;
 
         let data = Data::new()
-            .move_to((  0,  0))
-            .line_by((  0, ho))
-            .line_by(( wo,  0))
-            .line_by((  0,-ho))
+            .move_to(( 0,  0))
+            .line_by(( 0, ho))
+            .line_by((wo,  0))
+            .line_by(( 0,-ho))
             .close();
 
         let path = Path::new()
@@ -303,10 +268,10 @@ impl Nozzle {
             .set("d", data);
 
         let fill_data = Data::new()
-            .move_to((  i,  i))
-            .line_by((  0,  hi))
-            .line_by(( wi,  0))
-            .line_by((  0,-hi))
+            .move_to(( i,  i))
+            .line_by(( 0,  hi))
+            .line_by((wi,  0))
+            .line_by(( 0,-hi))
             .close();
 
         let fill_path = Path::new()
@@ -321,8 +286,8 @@ impl Nozzle {
             .set("font-size", spec.char_dims.y)
             .set("dominant-baseline", "middle")
             .set("text-anchor", "middle")
-            .set("x", wo/2f32)
-            .set("y", ho/2f32);
+            .set("x", wo / 2.0)
+            .set("y", ho / 2.0);
 
         let result = Group::new()
             .add(path)
@@ -330,10 +295,9 @@ impl Nozzle {
             .add(text_node)
             .set("transform", Translate::from(self.position));
 
-        self.move_by(Vec2::new(0f32,h));
+        self.move_by(Vec2::y(h));
 
         result
-
     }
 
     pub fn draw_flag(&mut self, w: f32, h: f32, spec: &BlockDrawSpec, text: String) -> Group {
@@ -342,12 +306,11 @@ impl Nozzle {
         let hi = h - i;
         let wi = w;
         let ho = h + i;
-        let wo = w + i * 2f32;
+        let wo = w + i * 2.0;
         let l  = spec.line_height();
 
-        let hho = ho * 0.5f32;
-        let hhi = hi * 0.5f32;
-
+        let hho = ho * 0.5;
+        let hhi = hi * 0.5;
 
         let data = Data::new()
             .move_to((  0,          0))
@@ -392,8 +355,8 @@ impl Nozzle {
             .set("font-size", spec.char_dims.y)
             .set("dominant-baseline", "middle")
             .set("text-anchor", "middle")
-            .set("x", wo/2f32)
-            .set("y", ho/2f32);
+            .set("x", wo / 2.0)
+            .set("y", ho / 2.0);
 
         let result = Group::new()
             .add(path)
@@ -401,10 +364,9 @@ impl Nozzle {
             .add(text_node)
             .set("transform", Translate::from(self.position));
 
-        self.move_by(Vec2::new(0.0, h));
+        self.move_by(Vec2::y(h));
 
         result
-
     }
 
     pub fn draw_byte(&mut self, spec: &BlockDrawSpec, text: String) -> Group {
@@ -423,11 +385,10 @@ impl Nozzle {
         self.increment_address(offset);
 
         if ellipse {
-            self.draw_byte(spec, format!("..."))
+            self.draw_byte(spec, "...".to_string())
         } else {
             self.draw_byte(spec, format!("({offset}B)"))
         }
-
     }
 
     pub fn draw_repr(&mut self, ribbon: &MemRibbon, address: usize, prim: Primitive, spec: &BlockDrawSpec) -> Group {
@@ -435,26 +396,24 @@ impl Nozzle {
         let h = spec.line_height() * prim.size_of() as f32;
         let text = prim.parse_at(ribbon, address)
             .map(|x| x.to_string())
-            .unwrap_or("???".to_string());
+            .unwrap_or_else(|| "???".to_string());
 
         self.draw_flag(w,h,spec,text)
     }
 
-
     pub fn draw_span<'a>(
-        &mut self, 
+        &mut self,
         ribbon: &MemRibbon,
-        spec:   &'a BlockDrawSpec, 
-        comp:   &'a Composite<'a>,
-        width:   f32,
+        spec: &'a BlockDrawSpec,
+        comp: &'a Composite<'a>,
+        width: f32,
     ) -> Group {
-
         let mut start_address = self.address;
         let mut result = Group::new();
 
         let mut byte_noz = self.subnozzle(self.position);
 
-        //let right_grp = spec.make_span_plan(kind, mins, width);
+        // let right_grp = spec.make_span_plan(kind, mins, width);
 
         for field in comp.fields.borrow().iter() {
             let padding = field.kind.align_pad(start_address as u16);
@@ -465,11 +424,10 @@ impl Nozzle {
             let vertical_offset = (field_address - self.address) as f32 * spec.line_height();
             let kind_tform = Vec2::new(spec.byte_width(),vertical_offset) + self.position;
 
-            //let width = spec.composite_member_width(comp);
+            // let width = spec.composite_member_width(comp);
             let kind_grp = field.make_plan(spec, kind_tform, Some(width), false)
                 .into_svg()
                 .set("transform",Translate::from(kind_tform));
-            
 
             let mut repr_group = Group::new();
             let mut repr_address = field_address;
@@ -486,11 +444,11 @@ impl Nozzle {
             }
 
             start_address += span_size;
-        
+
             if self.show_data {
                 result = result.add(repr_group);
             }
-        
+
             if self.show_kind {
                 result = result.add(kind_grp);
             }
@@ -502,22 +460,21 @@ impl Nozzle {
         let y_skip = skip as f32 * spec.line_height();
 
         let data_width = if self.show_data {
-            spec.repr_width() + spec.line_height()*0.5 + spec.fill_inset * 1.5f32 
-        } else { 0f32 };
+            spec.repr_width() + spec.line_height() * 0.5 + spec.fill_inset * 1.5
+        } else { 0.0 };
 
-        let mins = self.position - Vec2::new(data_width,0.0f32);
+        let mins = self.position - Vec2::new(data_width, 0.0);
 
-        let kind_width = if self.show_kind { width } else { 0f32 };
+        let kind_width = if self.show_kind { width } else { 0.0 };
 
-        let maxs =  self.position + Vec2::new(spec.byte_width()+kind_width,y_skip+spec.fill_inset);
+        let maxs = self.position + Vec2::new(spec.byte_width()+kind_width,y_skip+spec.fill_inset);
 
         self.mins = self.mins.min(mins);
         self.maxs = self.maxs.max(maxs);
-        
-        //result = result.set("transform",Translate::from(self.position));
-        self.move_by(Vec2::new(0.0,y_skip));
-        result
 
+        // result = result.set("transform",Translate::from(self.position));
+        self.move_by(Vec2::new(0.0, y_skip));
+        result
     }
 
     fn move_by(&mut self, delta: Vec2) {

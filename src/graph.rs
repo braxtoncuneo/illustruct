@@ -34,7 +34,7 @@ pub fn block_graph_color<N, E>(graph: &StableGraph<N,E,Undirected>) -> HashMap<N
         let mut id : usize = 0;
         let mut n_weights : Vec<usize> = cut_graph
             .neighbors(index)
-            .map(|n|cut_graph.node_weight(n).unwrap().clone().unwrap())
+            .map(|n| (*cut_graph.node_weight(n).unwrap()).unwrap())
             .collect();
 
         n_weights.sort();

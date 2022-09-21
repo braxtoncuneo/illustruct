@@ -3,7 +3,7 @@ use std::{ops::{Add, AddAssign, Sub, SubAssign}, iter::Peekable};
 use petgraph::stable_graph::NodeIndex;
 
 #[derive(Clone,Copy)]
-struct RGB(u8, u8, u8);
+struct Rgb(u8, u8, u8);
 
 #[derive(Clone, Copy, PartialEq, Default, Debug)]
 pub struct Vec2 {
@@ -16,6 +16,14 @@ impl Vec2 {
         Self { x, y }
     }
 
+    pub fn x(x: f32) -> Self {
+        Self { x, y: 0.0 }
+    }
+    
+    pub fn y(y: f32) -> Self {
+        Self { x: 0.0, y }
+    }
+    
     pub fn min(&self, other: Self) -> Self {
         Self { x: self.x.min(other.x), y: self.y.min(other.y) }
     }
@@ -23,7 +31,6 @@ impl Vec2 {
     pub fn max(&self, other: Self) -> Self {
         Self { x: self.x.max(other.x), y: self.y.max(other.y) }
     }
-
 }
 
 impl Add for Vec2 {

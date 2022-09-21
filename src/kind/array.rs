@@ -1,29 +1,25 @@
 use core::fmt;
-use std::fmt::Display;
 
-use crate::access::{AccessUnit, AccessTrace, PlaceValue, Error, ErrorKind};
+use crate::{
+    access::{
+        AccessUnit,
+        AccessTrace,
+        PlaceValue,
+        Error,
+        ErrorKind,
+    },
+    kind::{Kind, primitive::Primitive},
+};
 
-use super::{Kind, Primitive};
+use super::CType;
 
-
-
-#[derive(Clone)]
+#[derive(Clone, Copy)]
 pub struct Array <'kind> {
     pub kind: &'kind Kind<'kind>,
     pub size: usize,
 }
 
-
 impl <'kind> Array <'kind> {
-
-    pub fn size_of(&self) -> u16 {
-        self.kind.size_of() * (self.size as u16)
-    }
-
-    pub fn align_of(&self) -> u16 {
-        self.kind.align_of()
-    }
-
     pub fn base_fields(&self, address: &mut usize) -> Vec<(usize, Primitive)> {
         *address += self.kind.align_pad(*address as u16) as usize;
 
@@ -35,36 +31,43 @@ impl <'kind> Array <'kind> {
         result
     }
 
-
-
     pub fn access(
         &'kind self,
         unit: &AccessUnit,
         trace: &mut AccessTrace<'kind>,
-    ) -> Result<PlaceValue<'_>, Error<'_>>
-    {
+    ) -> Result<PlaceValue<'_>, Error<'_>> {
         use AccessUnit::*;
 
         match unit {
-            Deref => return self.kind.access(trace),
+            Deref => self.kind.access(trace),
             Index(idx) => {
                 trace.address += self.kind.size_of() as usize * idx;
-                return self.kind.access(trace)
+                self.kind.access(trace)
             },
-            unit => return Err(Error::at(
+            unit => Err(Error::at(
                 trace.field_name.clone(),
                 ErrorKind::Operation { op: unit.op_str(), kind: self.kind.clone() },
             )),
-        };
-
+        }
     }
-
-
 }
 
+impl CType for Array<'_> {
+    fn description(&self) -> &dyn fmt::Display {
+        self
+    }
+
+    fn size_of(&self) -> u16 {
+        self.kind.size_of() * (self.size as u16)
+    }
+
+    fn align_of(&self) -> u16 {
+        self.kind.align_of()
+    }
+}
 
 impl <'kind> fmt::Display for Array<'kind> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f,"{}[{}]",self.kind,self.size)
+        write!(f,"{}[{}]",self.kind, self.size)
     }
 }
