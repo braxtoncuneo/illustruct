@@ -3,19 +3,16 @@
 use illustruct::{
     kind::{
         Kind,
-        Primitive,
-        PrimValue,
+        primitive::Primitive,
         composite::{
             Field,
             CompositeMode,
-        }, reference::ReferenceMode,
+        },
     },
     block_draw::{
         BlockDrawSpec,
         util::Vec2,
     },
-    mem_ribbon::MemRibbon,
-    access::Access,
 };
 
 
@@ -74,8 +71,7 @@ fn main() {
             Field::new("c",&point),
         ],
     );
+
     let tri_rib = tri.into_ribbon();
     tri_rib.save_svg("triangle.svg", spec, false, true);
-
-
 }

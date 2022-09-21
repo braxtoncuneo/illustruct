@@ -5,7 +5,7 @@ use crate::{
 
 use std::fmt;
 
-#[derive(Clone, Copy, PartialEq, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum ReferenceMode {
     Ref,
     Ptr,
@@ -20,7 +20,7 @@ impl fmt::Display for ReferenceMode {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Copy)]
 pub struct Reference<'kind> {
     pub mode: ReferenceMode,
     pub kind: &'kind Kind <'kind>,
@@ -52,7 +52,7 @@ impl<'kind> Reference<'kind> {
         };
 
         let new_addr = Primitive::Size.parse_at(trace.ribbon, trace.address)
-            .ok_or(Error::at(
+            .ok_or_else(|| Error::at(
                 trace.field_name.clone(),
                 ErrorKind::Deref { old_addr: trace.address },
             ))?;

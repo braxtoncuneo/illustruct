@@ -1,102 +1,84 @@
-use std::{collections::VecDeque, cell::Ref};
-
+use std::iter;
 use pom::parser::{sym, is_a};
-use crate::{access::AccessUnit, kind::reference::ReferenceMode};
 
-use super::Access;
+use crate::{
+    access::{AccessPath, AccessUnit},
+    kind::reference::ReferenceMode,
+};
 
+type Parser<'a, O> = pom::parser::Parser<'a, char, O>;
 
 fn is_alphunder(ch:char) -> bool {
-    char::is_alphabetic(ch) | (ch == '_')
+    char::is_alphabetic(ch) || (ch == '_')
 }
 
 fn is_alphnumder(ch:char) -> bool {
-    char::is_alphanumeric(ch) | (ch == '_')
+    char::is_alphanumeric(ch) || (ch == '_')
 }
 
-fn star_space<'a>() -> pom::parser::Parser<'a,char,()> {
+fn star_space<'a>() -> Parser<'a, ()> {
     is_a(char::is_whitespace).repeat(0..).discard()
 }
 
-fn some_space<'a>() -> pom::parser::Parser<'a,char,()> {
+fn some_space<'a>() -> Parser<'a, ()> {
     is_a(char::is_whitespace).repeat(1..).discard()
 }
 
-
-fn label<'a>() -> pom::parser::Parser<'a,char,String> {
-    use pom::parser::is_a;
-
+fn label<'a>() -> Parser<'a, String> {
     (is_a(is_alphunder) + is_a(is_alphnumder).repeat(0..))
-        .map(|(head,tail)|{
-            let mut result = String::new();
-            result.push(head);
-            result.extend(tail.into_iter());
-            result
-        })
+        .map(|(head, tail)| iter::once(head).chain(tail).collect())
 }
 
-fn integer<'a>() -> pom::parser::Parser<'a,char,usize> {
+fn integer<'a>() -> Parser<'a, usize> {
     (is_a(char::is_numeric).repeat(1..))
-        .map(|seq|{
-            let mut result = String::new();
-            result.extend(seq.into_iter());
-            result.parse().unwrap()
-        })
+        .map(|seq| seq.into_iter().collect::<String>())
+        .convert(|s| s.parse())
 }
 
-fn field_expr<'a>() -> pom::parser::Parser<'a,char,AccessUnit> {
+fn field_expr<'a>() -> Parser<'a, AccessUnit> {
     (sym('.') * label())
-        .map(|label| AccessUnit::Field(label))
+        .map(AccessUnit::Field)
 }
 
-fn index_expr<'a>() -> pom::parser::Parser<'a,char,AccessUnit> {
-    ( sym('[') * integer() - sym(']') )
-        .map(|idx| AccessUnit::Index(idx))
+fn index_expr<'a>() -> Parser<'a, AccessUnit> {
+    (sym('[') * integer() - sym(']'))
+        .map(AccessUnit::Index)
 }
 
-fn arrow_expr<'a>() -> pom::parser::Parser<'a,char,AccessUnit> {
+fn arrow_expr<'a>() -> Parser<'a, AccessUnit> {
     ((sym('-') + sym('>')) * label())
-        .map(|label| AccessUnit::Arrow(label))
+        .map(AccessUnit::Arrow)
 }
 
-pub fn access_expr<'a>() -> pom::parser::Parser<'a,char,Access> {
+pub fn access_expr<'a>() -> Parser<'a, AccessPath> {
     let parser = sym('*').opt()
         + label()
-        + ( field_expr() | index_expr() | arrow_expr() ).repeat(0..);
+        + (field_expr() | index_expr() | arrow_expr()).repeat(0..);
 
-    parser.map(|((deref,head),mut tail)|{
-        let mut sequence = vec![AccessUnit::Field(head)];
-        sequence.append(&mut tail);
-        if deref.is_some() {
-            sequence.push(AccessUnit::Deref);
-        }
-        sequence.into()
-    })
+    parser.map(|((deref, head), tail)|
+        iter::once(AccessUnit::Field(head))
+            .chain(tail)
+            .chain(deref.map(|_| AccessUnit::Deref))
+            .collect::<Vec<_>>()
+            .into()
+    )
 }
-
-
 
 pub struct RefrDecl {
     label: String,
     mode: ReferenceMode,
 }
 
-
-pub fn field_decl<'a>() -> pom::parser::Parser<'a,char,()> {
+pub fn field_decl<'a>() -> Parser<'a, ()> {
     (
-          ( label()  - some_space() )
-        + ( (sym('*')|sym('&')).opt() - some_space() )
-        + ( label() - some_space() )
-        + ( (sym('[') - some_space()) + integer() - (some_space()-sym(']')) )
+        (label() - some_space())
+        + ((sym('*') | sym('&')).opt() - some_space())
+        + (label() - some_space())
+        + ((sym('[') - some_space()) + integer() - (some_space() - sym(']')))
         - sym(';')
-    ).map(|(((base_kind,refr),name),arr)|{
-        ()
-    })
+    ).map(drop)
 }
 
-pub fn kind_expr<'a>() -> pom::parser::Parser<'a,char,Access> {
+pub fn kind_expr<'a>() -> Parser<'a, AccessPath> {
     todo!()
 }
-
-
-

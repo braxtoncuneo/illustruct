@@ -9,7 +9,7 @@ name = "illustruct"
 path = "src/lib.rs"
 
 [[example]]
-name = "RAM_illust"
+name = "ram_illust"
 
 [[example]]
 name = "align_illust"

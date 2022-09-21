@@ -1,10 +1,7 @@
-
-
 use illustruct::{
     kind::{
         Kind,
-        Primitive,
-        PrimValue,
+        primitive::{Primitive, PrimValue},
         composite::Field,
     },
     block_draw::{
@@ -13,7 +10,6 @@ use illustruct::{
     },
     mem_ribbon::MemRibbon,
 };
-
 
 #[allow(unused_variables)]
 fn main() {
@@ -63,5 +59,4 @@ fn main() {
     }
 
     ram_rib.save_svg("RAM_illust.svg",spec,true,true);
-
 }

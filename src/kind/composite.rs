@@ -133,8 +133,7 @@ impl<'kind> Composite<'kind> {
         }
 
         self.fields.borrow().iter()
-            .map(|f| f.kind.base_fields(address))
-            .flatten()
+            .flat_map(|f| f.kind.base_fields(address))
             .collect()
     }
 
