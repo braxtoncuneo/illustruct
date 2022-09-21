@@ -7,6 +7,8 @@ use crate::{
     mem_ribbon::MemRibbon,
 };
 
+use super::CType;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Primitive {
     Bool, Char,
@@ -33,7 +35,20 @@ impl Primitive {
         Some(value)
     }
 
-    pub fn size_of(&self) -> u16 {
+    pub fn access<'kind>(&'kind self, unit: &AccessUnit, trace: &AccessTrace<'kind>) -> Result<PlaceValue<'kind>, Error> {
+        Err(Error::at(
+            trace.field_name.clone(),
+            ErrorKind::Operation { op: unit.op_str(), kind: Kind::Primitive(*self) },
+        ))
+    }
+}
+
+impl CType for Primitive {
+    fn description(&self) -> &dyn fmt::Display {
+        self
+    }
+
+    fn size_of(&self) -> u16 {
         use Primitive::*;
         match self {
             Bool => 1,
@@ -45,15 +60,8 @@ impl Primitive {
         }
     }
 
-    pub fn align_of(&self) -> u16 {
+    fn align_of(&self) -> u16 {
         self.size_of()
-    }
-
-    pub fn access<'kind>(&'kind self, unit: &AccessUnit, trace: &AccessTrace<'kind>) -> Result<PlaceValue<'kind>, Error> {
-        Err(Error::at(
-            trace.field_name.clone(),
-            ErrorKind::Operation { op: unit.op_str(), kind: Kind::Primitive(*self) },
-        ))
     }
 }
 
@@ -99,7 +107,7 @@ impl PrimValue {
             F64(x) => x.as_bytes(),
         }
     }
-    
+
     fn bytes_mut(&mut self) -> &mut [u8] {
         use PrimValue::*;
 

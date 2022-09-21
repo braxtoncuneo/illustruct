@@ -1,6 +1,5 @@
-#![allow(dead_code)]
-
 use std::{fmt::{Display, self}, cell::RefCell};
+use enum_dispatch::enum_dispatch;
 
 use crate::{
     access::{AccessTrace, PlaceValue, Error, ErrorKind},
@@ -16,15 +15,18 @@ use reference::Reference;
 use composite::Composite;
 use primitive::{Primitive, PrimValue};
 
-use self::{composite::{CompositeMode, Field}, reference::ReferenceMode, array::Array};
+use self::{composite::Field, array::Array};
 
-#[derive(Clone)]
-pub struct Alias<'kind> {
-    name: String,
-    kind: &'kind Kind<'kind>
+#[enum_dispatch]
+pub trait CType: Sized + Display {
+    fn description(&self) -> &dyn Display;
+    fn size_of(&self) -> u16;
+    fn align_of(&self) -> u16;
+    fn display(&self) -> &dyn Display { self }
 }
 
 #[derive(Clone)]
+#[enum_dispatch(CType)]
 pub enum Kind<'kind> {
     Primitive(Primitive),
     Reference(Reference<'kind>),
@@ -34,60 +36,6 @@ pub enum Kind<'kind> {
 }
 
 impl<'kind> Kind<'kind> {
-    pub fn prim(value: Primitive) -> Self {
-        Kind::Primitive(value)
-    }
-
-    pub fn refr(mode: ReferenceMode, kind: &'kind Kind<'kind>) -> Self {
-        Kind::Reference(Reference { mode, kind })
-    }
-
-    pub fn comp<T: ToString>(name: T, mode: CompositeMode, fields: Vec<Field<'kind>>) -> Self {
-        Kind::Composite(Composite {
-            name: name.to_string(),
-            mode,
-            fields: RefCell::new(fields)
-        })
-    }
-
-    pub fn array(kind: &'kind Kind<'kind>, size: usize) -> Self {
-        Kind::Array(Array{kind,size})
-    }
-
-    pub fn alias<T: ToString>(name: T, kind: &'kind Kind<'kind>) -> Self {
-        Kind::Alias(Alias{name: name.to_string() ,kind})
-    }
-
-    pub fn category(&self) -> &dyn Display {
-        match self {
-            Kind::Primitive(x) => x,
-            Kind::Reference(x) => &x.mode,
-            Kind::Composite(x) => &x.mode,
-            Kind::Array(x) => x,
-            Kind::Alias(x) => x.kind.category(),
-        }
-    }
-
-    pub fn size_of(&self) -> u16 {
-        match self {
-            Kind::Primitive(x) => x.size_of(),
-            Kind::Reference(x) => x.size_of(),
-            Kind::Composite(x) => x.size_of(),
-            Kind::Array(x)  => x.size_of(),
-            Kind::Alias(x) => x.kind.size_of(),
-        }
-    }
-
-    pub fn align_of(&self) -> u16 {
-        match self {
-            Kind::Primitive(x) => x.align_of(),
-            Kind::Reference(x) => x.align_of(),
-            Kind::Composite(x) => x.align_of(),
-            Kind::Array(x) => x.align_of(),
-            Kind::Alias(x) => x.kind.align_of(),
-        }
-    }
-
     pub fn align_pad(&self,offset:u16) -> u16 {
         let align = self.align_of();
         let remainder = offset % align;
@@ -147,9 +95,9 @@ impl<'kind> Kind<'kind> {
             Array(x) => x.access(&unit, trace),
             Alias(_) => unreachable!(),
         };
-        
+
         value.map_err(|err| err.with_context(
-            self.category(),
+            self.description(),
             trace.field_name.as_str(),
         ))
     }
@@ -175,19 +123,41 @@ impl<'kind> Kind<'kind> {
 
 impl fmt::Display for Kind<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        use Kind::*;
-        match self {
-            Primitive(primitive) => write!(f, "{primitive}"),
-            Reference(reference) => write!(f, "{reference}"),
-            Composite(composite) => write!(f, "{composite}"),
-            Array(array) => write!(f, "{array}"),
-            Alias(alias) => write!(f, "{}", alias.name ),
+        self.display().fmt(f)
+    }
+}
+
+#[derive(Clone)]
+pub struct Alias<'kind> {
+    name: String,
+    kind: &'kind Kind<'kind>
+}
+
+impl<'kind> Alias<'kind> {
+    pub fn new(name: impl ToString, kind: &'kind Kind<'kind>) -> Self {
+        Self {
+            name: name.to_string(),
+            kind,
         }
     }
 }
 
-impl From<Primitive> for Kind<'_> {
-    fn from(primitive: Primitive) -> Self {
-        Self::Primitive(primitive)
+impl CType for Alias<'_> {
+    fn description(&self) -> &dyn Display {
+        self.kind.description()
+    }
+
+    fn size_of(&self) -> u16 {
+        self.kind.size_of()
+    }
+
+    fn align_of(&self) -> u16 {
+        self.kind.align_of()
+    }
+}
+
+impl Display for Alias<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.name.as_str())
     }
 }

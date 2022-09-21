@@ -11,6 +11,8 @@ use crate::{
     kind::{Kind, primitive::Primitive},
 };
 
+use super::CType;
+
 #[derive(Clone, Copy)]
 pub struct Array <'kind> {
     pub kind: &'kind Kind<'kind>,
@@ -18,15 +20,6 @@ pub struct Array <'kind> {
 }
 
 impl <'kind> Array <'kind> {
-
-    pub fn size_of(&self) -> u16 {
-        self.kind.size_of() * (self.size as u16)
-    }
-
-    pub fn align_of(&self) -> u16 {
-        self.kind.align_of()
-    }
-
     pub fn base_fields(&self, address: &mut usize) -> Vec<(usize, Primitive)> {
         *address += self.kind.align_pad(*address as u16) as usize;
 
@@ -59,9 +52,22 @@ impl <'kind> Array <'kind> {
     }
 }
 
+impl CType for Array<'_> {
+    fn description(&self) -> &dyn fmt::Display {
+        self
+    }
+
+    fn size_of(&self) -> u16 {
+        self.kind.size_of() * (self.size as u16)
+    }
+
+    fn align_of(&self) -> u16 {
+        self.kind.align_of()
+    }
+}
 
 impl <'kind> fmt::Display for Array<'kind> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f,"{}[{}]",self.kind,self.size)
+        write!(f,"{}[{}]",self.kind, self.size)
     }
 }

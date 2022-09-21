@@ -7,7 +7,7 @@ use svg::node::element::{
     path::Data
 };
 
-use crate::kind::{Kind, composite::{CompositeMode, Field, Composite}, array::Array};
+use crate::kind::{Kind, composite::{CompositeMode, Field, Composite}, array::Array, CType};
 
 pub mod block_plan;
 pub mod util;
@@ -213,14 +213,14 @@ impl BlockDrawSpec {
         }
     }
 
-    pub fn array_member_width(&self, Array { kind, size }: Array) -> f32 {        
+    pub fn array_member_width(&self, Array { kind, size }: Array) -> f32 {
         if size == 0 {
             return 0.0;
         }
 
         let first_field = Field::new(0, kind);
         let first_width = self.field_width(&first_field, true) + self.prong_xpad;
-        
+
         let last_field = Field::new(size - 1, kind);
         let last_width = self.field_width(&last_field, false) + self.prong_xpad;
 

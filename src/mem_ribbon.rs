@@ -6,7 +6,7 @@ use svg::{node::element::{Group, Text, Path, path::Data,}, Document};
 
 use crate::{
     block_draw::{util::{Vec2, Translate}, BlockDrawSpec},
-    kind::{primitive::{Primitive, PrimValue}, composite::{Field, Composite, CompositeMode}},
+    kind::{primitive::{Primitive, PrimValue}, composite::{Field, Composite, CompositeMode}, CType},
     access::{self, MemByte, PlaceValue, AccessTrace, AccessPath},
 };
 
@@ -95,7 +95,7 @@ impl <'kind> MemRibbon <'kind> {
             address += match seg {
                 Chop(_) => 0,
                 Skip(skip,_) => *skip,
-                Span(comp) => 
+                Span(comp) =>
                     if comp.name == span_name {
                         span_comp = Some(comp);
                         break;
@@ -186,16 +186,16 @@ impl <'kind> MemRibbon <'kind> {
     }
 
     pub fn draw(
-        &'kind self, 
-        position: Vec2, 
-        spec: &'kind BlockDrawSpec, 
-        show_data: bool, 
+        &'kind self,
+        position: Vec2,
+        spec: &'kind BlockDrawSpec,
+        show_data: bool,
         show_kind: bool,
     ) -> (Group, (Vec2, Vec2)) {
         use MemRibbonSegment::*;
 
         let mut nozzle = Nozzle {
-            address: self.base_adr, 
+            address: self.base_adr,
             position, // Vec2::default(),
             mins: position,
             maxs: position,
@@ -402,9 +402,9 @@ impl Nozzle {
     }
 
     pub fn draw_span<'a>(
-        &mut self, 
+        &mut self,
         ribbon: &MemRibbon,
-        spec: &'a BlockDrawSpec, 
+        spec: &'a BlockDrawSpec,
         comp: &'a Composite<'a>,
         width: f32,
     ) -> Group {
@@ -444,11 +444,11 @@ impl Nozzle {
             }
 
             start_address += span_size;
-        
+
             if self.show_data {
                 result = result.add(repr_group);
             }
-        
+
             if self.show_kind {
                 result = result.add(kind_grp);
             }
@@ -460,7 +460,7 @@ impl Nozzle {
         let y_skip = skip as f32 * spec.line_height();
 
         let data_width = if self.show_data {
-            spec.repr_width() + spec.line_height() * 0.5 + spec.fill_inset * 1.5 
+            spec.repr_width() + spec.line_height() * 0.5 + spec.fill_inset * 1.5
         } else { 0.0 };
 
         let mins = self.position - Vec2::new(data_width, 0.0);
@@ -471,7 +471,7 @@ impl Nozzle {
 
         self.mins = self.mins.min(mins);
         self.maxs = self.maxs.max(maxs);
-        
+
         // result = result.set("transform",Translate::from(self.position));
         self.move_by(Vec2::new(0.0, y_skip));
         result

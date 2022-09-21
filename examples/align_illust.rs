@@ -2,7 +2,7 @@ use illustruct::{
     kind::{
         Kind,
         primitive::Primitive,
-        composite::{Field, CompositeMode},
+        composite::{Field, CompositeMode, Composite},
     },
     block_draw::{BlockDrawSpec, util::Vec2},
     mem_ribbon::MemRibbon,
@@ -56,7 +56,7 @@ fn main() {
     align_rib  .save_svg("align_illust.svg",spec,false,true);
     unalign_rib.save_svg("unalign_illust.svg",spec,false,true);
 
-    let compact_struct = Kind::comp(
+    let compact_struct = Kind::from(Composite::new(
         "CompactStruct",
         CompositeMode::Product,
         vec![
@@ -64,9 +64,9 @@ fn main() {
             Field::new("second_byte",&uint8_t),
             Field::new("  two_bytes",&uint16_t),
         ],
-    );
+    ));
 
-    let padded_struct = Kind::comp(
+    let padded_struct = Kind::from(Composite::new(
         "PaddedStruct",
         CompositeMode::Product,
         vec![
@@ -74,7 +74,7 @@ fn main() {
             Field::new("  two_bytes",&uint16_t),
             Field::new("second_byte",&uint8_t),
         ],
-    );
+    ));
 
     let comp_rib = compact_struct.into_ribbon();
     comp_rib.save_svg("compact_struct.svg", spec, false, true);

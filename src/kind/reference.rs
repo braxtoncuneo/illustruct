@@ -1,5 +1,5 @@
 use crate::{
-    kind::{PrimValue, Kind, Primitive},
+    kind::{PrimValue, Kind, Primitive, CType},
     access::{ErrorKind, Error, PlaceValue, AccessTrace, AccessUnit},
 };
 
@@ -27,12 +27,8 @@ pub struct Reference<'kind> {
 }
 
 impl<'kind> Reference<'kind> {
-    pub fn align_of(&self) -> u16 {
-        Primitive::Size.size_of()
-    }
-
-    pub fn size_of(&self) -> u16 {
-        Primitive::Size.size_of()
+    pub fn new(mode: ReferenceMode, kind: &'kind Kind<'kind>) -> Self {
+        Self { mode, kind }
     }
 
     pub fn access_ref(
@@ -118,6 +114,20 @@ impl<'kind> Reference<'kind> {
             ReferenceMode::Ref => self.access_ref(unit, trace),
             ReferenceMode::Ptr => self.access_ptr(unit, trace),
         }
+    }
+}
+
+impl CType for Reference<'_> {
+    fn description(&self) -> &dyn fmt::Display {
+        &self.mode
+    }
+
+    fn align_of(&self) -> u16 {
+        Primitive::Size.size_of()
+    }
+
+    fn size_of(&self) -> u16 {
+        Primitive::Size.size_of()
     }
 }
 

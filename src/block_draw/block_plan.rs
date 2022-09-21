@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use crate::{
-    kind::{Kind, composite::CompositeMode},
+    kind::{Kind, composite::CompositeMode, CType},
     block_draw::{
         BlockDrawSpec,
         util::{BlockAdjSpan, BlockAdjListPairIter, Vec2, Translate},
@@ -175,7 +175,7 @@ impl<'kind> BlockDiagPlan<'kind> {
 
     pub fn into_svg_recurse(&mut self, color_map: &HashMap<NodeIndex, usize>) -> Group {
         //let colors : [&str;8] = ["red","green","blue","magenta","cyan","yellow","grey","white" ];
-        let colors : [&str;8] = ["#DDD","#BBB","#999","#777","#555","#333","#111","#222" ];
+        let colors: [&str;8] = ["#DDD","#BBB","#999","#777","#555","#333","#111","#222" ];
 
         let base_pos = self.relative_pos.unwrap_or_default();
 

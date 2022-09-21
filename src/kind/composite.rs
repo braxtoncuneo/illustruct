@@ -6,7 +6,7 @@ use crate::{
 
 use std::{fmt, cell::RefCell};
 
-use super::Primitive;
+use super::{Primitive, CType};
 
 #[derive(Clone)]
 pub struct Field<'kind> {
@@ -71,14 +71,15 @@ pub struct Composite<'kind> {
 }
 
 impl<'kind> Composite<'kind> {
-    pub(crate) fn align_of(&self) -> u16 {
-        self.fields.borrow().iter()
-            .map(|x| x.kind.size_of())
-            .max()
-            .unwrap_or_default()
+    pub fn new(name: impl ToString, mode: CompositeMode, fields: Vec<Field<'kind>>) -> Self {
+        Self {
+            name: name.to_string(),
+            mode,
+            fields: RefCell::new(fields),
+        }
     }
 
-    pub(crate) fn size_of_no_end_pad(&self) -> u16 {
+    pub fn size_of_no_end_pad(&self) -> u16 {
         match self.mode {
             CompositeMode::Product => self.fields.borrow().iter().fold(0, |acc,x|
                 acc + x.kind.size_of() + x.kind.align_pad(acc)
@@ -90,16 +91,7 @@ impl<'kind> Composite<'kind> {
         }
     }
 
-    pub(crate) fn size_of(&self) -> u16 {
-        let base_size = self.size_of_no_end_pad();
-        let align = self.align_of();
-        let remainder = base_size % align;
-        let padding = if remainder > 0 { align - remainder } else { 0 };
-
-        base_size + padding
-    }
-
-    pub(crate) fn offset_of(&self, field_name: &str) -> Option<u16> {
+    pub fn offset_of(&self, field_name: &str) -> Option<u16> {
         if self.mode == CompositeMode::Sum {
             return Some(0);
         }
@@ -123,7 +115,6 @@ impl<'kind> Composite<'kind> {
     }
 
     pub fn base_fields(&self, address: &mut usize) -> Vec<(usize,Primitive)> {
-
         if self.mode == CompositeMode::Sum {
             if self.fields.borrow().is_empty() {
                 return Vec::new();
@@ -137,13 +128,13 @@ impl<'kind> Composite<'kind> {
             .collect()
     }
 
-    pub(crate) fn type_of(&'kind self, field_name: &str) -> Option<&'kind Kind<'kind>> {
+    pub fn type_of(&'kind self, field_name: &str) -> Option<&'kind Kind<'kind>> {
         self.fields.borrow().iter()
             .find(|field| field.name.as_deref() == Some(field_name))
             .map(|field| field.kind)
     }
 
-    pub(crate) fn access(&'kind self, unit: &AccessUnit, trace: &mut AccessTrace<'kind>) -> Result<PlaceValue<'kind>, Error> {
+    pub fn access(&'kind self, unit: &AccessUnit, trace: &mut AccessTrace<'kind>) -> Result<PlaceValue<'kind>, Error> {
         let subfield = match unit {
             AccessUnit::Field(field) => field,
             _ => return Err(Error::at(
@@ -163,6 +154,28 @@ impl<'kind> Composite<'kind> {
                 ErrorKind::SubField { name: subfield.clone() },
             )),
         }
+    }
+}
+
+impl CType for Composite<'_> {
+    fn description(&self) -> &dyn fmt::Display {
+        &self.mode
+    }
+
+    fn size_of(&self) -> u16 {
+        let base_size = self.size_of_no_end_pad();
+        let align = self.align_of();
+        let remainder = base_size % align;
+        let padding = if remainder > 0 { align - remainder } else { 0 };
+
+        base_size + padding
+    }
+
+    fn align_of(&self) -> u16 {
+        self.fields.borrow().iter()
+            .map(|x| x.kind.size_of())
+            .max()
+            .unwrap_or_default()
     }
 }
 

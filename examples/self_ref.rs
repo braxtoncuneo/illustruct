@@ -2,8 +2,8 @@ use illustruct::{
     kind::{
         Kind,
         primitive::{Primitive, PrimValue},
-        composite::{Field, CompositeMode},
-        reference::ReferenceMode,
+        composite::{Field, CompositeMode, Composite},
+        reference::{ReferenceMode, Reference}, Alias,
     },
     block_draw::{BlockDrawSpec, util::Vec2},
     mem_ribbon::MemRibbon,
@@ -28,9 +28,9 @@ fn main() {
         chamfer_size: 6.0
     };
 
-    let data = Kind::alias("data",&float);
-    let link = Kind::comp("link",CompositeMode::Product,Vec::new());
-    let link_ptr = Kind::refr(ReferenceMode::Ptr, &link);
+    let data = Kind::from(Alias::new("data", &float));
+    let link = Kind::from(Composite::new("link", CompositeMode::Product,Vec::new()));
+    let link_ptr = Kind::from(Reference::new(ReferenceMode::Ptr, &link));
     link.add_field("data", &data);
     link.add_field("next", &link_ptr);
 

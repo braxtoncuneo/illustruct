@@ -87,12 +87,12 @@ impl AccessPath {
         self
     }
 
-    pub fn index(mut self,idx: usize) -> Self {
+    pub fn index(mut self, idx: usize) -> Self {
         self.0.push_back(AccessUnit::Index(idx));
         self
     }
 
-    pub fn field(mut self,fname: &str) -> Self {
+    pub fn field(mut self, fname: &str) -> Self {
         self.0.push_back(AccessUnit::Field(fname.to_string()));
         self
     }
@@ -135,9 +135,9 @@ pub struct AccessTrace <'kind> {
 }
 
 pub struct Error<'a> {
-    pub(crate) field_name: String,
-    pub(crate) kind: ErrorKind<'a>,
-    pub(crate) context: Option<String>,
+    pub field_name: String,
+    pub kind: ErrorKind<'a>,
+    pub context: Option<String>,
 }
 
 impl<'a> Error<'a> {
@@ -145,8 +145,8 @@ impl<'a> Error<'a> {
         Self { field_name, kind, context: None }
     }
 
-    pub fn with_context(mut self, category: &dyn fmt::Display, field_name: &str) -> Self {
-        self.context = Some(format!(" within {} {}", category, field_name));
+    pub fn with_context(mut self, description: &dyn fmt::Display, field_name: &str) -> Self {
+        self.context = Some(format!(" within {} {}", description, field_name));
         self
     }
 }
@@ -185,7 +185,6 @@ impl fmt::Debug for Error<'_> {
         write!(f,"{}", self)
     }
 }
-
 
 pub enum ErrorKind<'a> {
     Operation {
