@@ -38,14 +38,14 @@ impl<'kind> Reference<'kind> {
     ) -> access::Result<'kind> {
         if !indirection.is_field() {
             return Err(access::Error::at(
-                trace.field_name.clone(),
-                access::ErrorKind::Operation { op: indirection.operator(), kind: self.kind.clone() },
+                trace.field_name,
+                access::ErrorKind::operation(&indirection, self.kind.clone()),
             ));
         }
 
         let new_addr = Primitive::Size.parse_at(trace.ribbon, trace.address)
             .ok_or_else(|| access::Error::at(
-                trace.field_name.clone(),
+                &trace.field_name,
                 access::ErrorKind::Deref { old_addr: trace.address },
             ))?;
 
@@ -57,8 +57,8 @@ impl<'kind> Reference<'kind> {
         match self.kind {
             Kind::Composite(comp) => comp.access_with(indirection, trace),
             _ => Err(access::Error::at(
-                trace.field_name.clone(),
-                access::ErrorKind::Operation { op: indirection.operator(), kind: self.kind.clone() },
+                trace.field_name,
+                access::ErrorKind::operation(&indirection, self.kind.clone()),
             )),
         }
     }
@@ -73,7 +73,7 @@ impl<'kind> Reference<'kind> {
 
         trace.address = match ptr_val {
             None => return Err(access::Error::at(
-                trace.field_name.clone(),
+                trace.field_name,
                 access::ErrorKind::Deref { old_addr },
             )),
             Some(PrimValue::Size(adr)) => adr as usize,
@@ -84,7 +84,7 @@ impl<'kind> Reference<'kind> {
             Indirection::Arrow(field) => match self.kind {
                 Kind::Composite(comp) => comp.access_with(Indirection::Field(field), trace),
                 kind => Err(access::Error::at(
-                    trace.field_name.clone(),
+                    trace.field_name,
                     access::ErrorKind::Arrow { kind: kind.clone() },
                 )),
             }
@@ -94,8 +94,8 @@ impl<'kind> Reference<'kind> {
                 self.kind.access(trace)
             }
             Indirection::Field(_) => Err(access::Error::at(
-                trace.field_name.clone(),
-                access::ErrorKind::Operation { op: indirection.operator(), kind: self.kind.clone() },
+                trace.field_name,
+                access::ErrorKind::operation(&indirection, self.kind.clone()),
             )),
         }
     }

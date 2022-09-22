@@ -63,7 +63,7 @@ impl<'kind> Kind<'kind> {
             let parsed_size = Primitive::Size
                 .parse_at(trace.ribbon, trace.address)
                 .ok_or_else(|| access::Error::at(
-                    trace.field_name.clone(),
+                    trace.field_name,
                     access::ErrorKind::Deref { old_addr: trace.address }
                 ))?;
 
@@ -98,7 +98,7 @@ impl<'kind> Kind<'kind> {
         }
     }
 
-    pub fn into_ribbon(&'kind self) -> MemRibbon<'kind> {
+    pub fn to_ribbon(&'kind self) -> MemRibbon<'kind> {
         MemRibbon::new(0).span("", vec![Field::anon(self)])
     }
 
@@ -109,6 +109,10 @@ impl<'kind> Kind<'kind> {
         };
 
         composite.fields.borrow_mut().push(Field::new(name, kind))
+    }
+
+    pub fn field_named(&'kind self, name: impl ToString) -> Field<'kind> {
+        Field::new(name, self)
     }
 }
 

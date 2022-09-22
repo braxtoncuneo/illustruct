@@ -2,7 +2,7 @@ use illustruct::{
     kind::{
         Kind,
         primitive::{Primitive, PrimValue},
-        composite::{self, Field, Composite},
+        composite::{Field, Composite},
         reference::{self, Reference},
         Alias,
     },
@@ -28,7 +28,7 @@ fn main() {
     };
 
     let data = Kind::from(Alias::new("data", &float));
-    let link = Kind::from(Composite::new("link", composite::Mode::Product, Vec::new()));
+    let link = Kind::from(Composite::product("link", Vec::new()));
     let link_ptr = Kind::from(Reference::new(reference::Mode::Ptr, &link));
     link.add_field("data", &data);
     link.add_field("next", &link_ptr);

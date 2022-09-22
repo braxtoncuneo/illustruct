@@ -72,10 +72,18 @@ pub struct Composite<'kind> {
 }
 
 impl<'kind> Composite<'kind> {
-    pub fn new(name: impl ToString, mode: Mode, fields: Vec<Field<'kind>>) -> Self {
+    pub fn product(name: impl ToString, fields: Vec<Field<'kind>>) -> Self {
         Self {
             name: name.to_string(),
-            mode,
+            mode: Mode::Product,
+            fields: RefCell::new(fields),
+        }
+    }
+    
+    pub fn sum(name: impl ToString, fields: Vec<Field<'kind>>) -> Self {
+        Self {
+            name: name.to_string(),
+            mode: Mode::Sum,
             fields: RefCell::new(fields),
         }
     }
@@ -154,12 +162,12 @@ impl<'kind> CType<'kind> for Composite<'kind> {
 
     fn access_with(&self, indirection: Indirection, mut trace: Trace<'kind>) -> access::Result<'kind> {
         let subfield = indirection.as_field().ok_or_else(|| access::Error::at(
-            trace.field_name.clone(),
-            access::ErrorKind::Operation { op: indirection.operator(), kind: Kind::from(self.clone()) },
+            &trace.field_name,
+            access::ErrorKind::operation(&indirection, Kind::from(self.clone())),
         ))?;
 
         let offset = self.offset_of(subfield).ok_or_else(|| access::Error::at(
-            trace.field_name.clone(),
+            &trace.field_name,
             access::ErrorKind::SubField { name: subfield.into() },
         ))?;
 

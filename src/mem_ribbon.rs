@@ -1,13 +1,13 @@
 #![allow(dead_code)]
 
-use std::{iter, cell::RefCell, fmt};
+use std::{iter, fmt};
 use svg::{node::element::{Group, Text, path::Data, Path as SvgPath}, Document};
 
 use crate::{
     block_draw::{util::{Vec2, Translate}, BlockDrawSpec},
     kind::{
         primitive::{Primitive, PrimValue},
-        composite::{self, Field, Composite},
+        composite::{Field, Composite},
         CType,
     },
     access::{self, Indirection, Trace},
@@ -90,11 +90,7 @@ impl<'kind> MemRibbon<'kind> {
     pub fn span(mut self, name: impl ToString, fields: Vec<Field<'kind>>) -> Self {
         let end_adr = self.base_adr + self.data.len();
 
-        let comp = Composite {
-            name: name.to_string(),
-            mode: composite::Mode::Product,
-            fields: RefCell::new(fields),
-        };
+        let comp = Composite::product(name, fields);
 
         let align = comp.align_of() as usize;
         let align_rem = end_adr % align;
@@ -111,19 +107,17 @@ impl<'kind> MemRibbon<'kind> {
     }
 
     pub fn get(&'kind self, mut path: access::Path) -> access::Result<'kind> {
-        let span_name = match path.pop_front() {
-            Some(Indirection::Field(field_name)) => field_name,
-            Some(op) => return Err(access::Error {
-                field_name: "MemRibbon".to_string(),
-                kind: access::ErrorKind::RibbonOp { op: op.operator() },
-                context: None,
-            }),
-            None => return Err(access::Error {
-                field_name: "MemRibbon".to_string(),
-                kind: access::ErrorKind::DirectAccess,
-                context: None,
-            }),
-        };
+        let field_name = match path.pop_front() {
+            Some(Indirection::Field(field_name)) => Ok(field_name),
+            Some(indirection) => Err(access::Error::at(
+                "MemRibbon",
+                access::ErrorKind::ribbon_op(&indirection),
+            )),
+            None => Err(access::Error::at(
+                "MemRibbon",
+                access::ErrorKind::DirectAccess,
+            )),
+        }?;
 
         let mut address = self.base_adr;
         let mut span_comp = None;
@@ -133,7 +127,7 @@ impl<'kind> MemRibbon<'kind> {
                 Segment::Chop(_) => 0,
                 Segment::Skip(skip, _) => *skip,
                 Segment::Span(comp) =>
-                    if comp.name == span_name {
+                    if comp.name == field_name {
                         span_comp = Some(comp);
                         break;
                     } else {
@@ -142,23 +136,20 @@ impl<'kind> MemRibbon<'kind> {
             }
         }
 
-        let span_comp = span_comp.ok_or_else(|| access::Error {
-            field_name: "MemRibbon".to_string(),
-            kind: access::ErrorKind::SubField { name: span_name },
-            context: None,
-        })?;
+        let span_comp = span_comp.ok_or_else(|| access::Error::at(
+            "MemRibbon",
+            access::ErrorKind::SubField { name: field_name },
+        ))?;
 
-        let indirection = path.pop_front().ok_or_else(|| access::Error{
-            field_name: "MemRibbonSpan".to_string(),
-            kind: access::ErrorKind::DirectAccess,
-            context: None,
-        })?;
+        let indirection = path.pop_front().ok_or_else(|| access::Error::at(
+            "MemRibbonSpan",
+            access::ErrorKind::DirectAccess,
+        ))?;
 
-        let name = indirection.as_field().ok_or_else(|| access::Error {
-            field_name: "MemRibbonSpan".to_string(),
-            kind: access::ErrorKind::RibbonOp { op: indirection.operator() },
-            context: None,
-        })?;
+        let name = indirection.as_field().ok_or_else(|| access::Error::at(
+            "MemRibbonSpan",
+            access::ErrorKind::ribbon_op(&indirection),
+        ))?;
 
         span_comp.access_with(
             Indirection::Field(name.into()),

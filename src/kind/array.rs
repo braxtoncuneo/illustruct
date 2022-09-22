@@ -44,8 +44,8 @@ impl<'kind> CType<'kind> for Array<'kind> {
                 self.kind.access(trace)
             },
             indirection => Err(access::Error::at(
-                trace.field_name.clone(),
-                access::ErrorKind::Operation { op: indirection.operator(), kind: self.kind.clone() },
+                trace.field_name,
+                access::ErrorKind::operation(&indirection, self.kind.clone()),
             )),
         }
     }

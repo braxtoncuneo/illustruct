@@ -122,8 +122,12 @@ pub struct Error<'kind> {
 }
 
 impl<'kind> Error<'kind> {
-    pub fn at(field_name: String, kind: ErrorKind<'kind>) -> Self {
-        Self { field_name, kind, context: None }
+    pub fn at(field_name: impl ToString, kind: ErrorKind<'kind>) -> Self {
+        Self {
+            field_name: field_name.to_string(),
+            kind,
+            context: None,
+        }
     }
 
     pub fn with_context(mut self, description: &dyn fmt::Display, field_name: &str) -> Self {
@@ -167,17 +171,17 @@ impl fmt::Debug for Error<'_> {
     }
 }
 
-pub enum ErrorKind<'a> {
+pub enum ErrorKind<'kind> {
     Operation {
         op: &'static str,
-        kind: Kind<'a>,
+        kind: Kind<'kind>,
     },
     Arrow {
-        kind: Kind<'a>
+        kind: Kind<'kind>
     },
     Unwind {
         original: String,
-        kind: Kind<'a>,
+        kind: Kind<'kind>,
     },
     Deref {
         old_addr: usize,
@@ -189,6 +193,16 @@ pub enum ErrorKind<'a> {
     RibbonOp {
         op: &'static str,
     },
+}
+
+impl<'kind> ErrorKind<'kind> {
+    pub fn operation(indirection: &Indirection, kind: Kind<'kind>) -> Self {
+        Self::Operation { op: indirection.operator(), kind }
+    }
+
+    pub fn ribbon_op(indirection: &Indirection) -> Self {
+        Self::RibbonOp { op: indirection.operator() }
+    }
 }
 
 #[cfg(test)]

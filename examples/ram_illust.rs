@@ -1,7 +1,7 @@
 use illustruct::{
     kind::{
         primitive::{Primitive, PrimValue},
-        composite::Field, Alias, Kind,
+        Alias, Kind,
     },
     block_draw::{BlockDrawSpec, util::Vec2},
     mem_ribbon::MemRibbon,
@@ -12,7 +12,7 @@ fn main() {
     use Primitive::*;
 
     let uint8_t = Kind::from(U8);
-    let byte = Alias::new("byte", &uint8_t).into();
+    let byte = Kind::from(Alias::new("byte", &uint8_t));
 
     let spec = &BlockDrawSpec {
         char_dims:  Vec2::new(10.0, 16.0),
@@ -28,16 +28,16 @@ fn main() {
     let mut ram_rib = MemRibbon::new(0)
         .span(
             "RAM_start",
-            (0..8).map(|i| Field::new(i, &byte)).collect(),
+            (0..8).map(|i| byte.field_named(i)).collect(),
         )
         .ellipse(0)
         .span(
             "RAM_end",
             vec![
-                Field::new("N-4", &byte),
-                Field::new("N-3", &byte),
-                Field::new("N-2", &byte),
-                Field::new("N-1", &byte),
+                byte.field_named("N-4"),
+                byte.field_named("N-3"),
+                byte.field_named("N-2"),
+                byte.field_named("N-1"),
             ]
         );
 

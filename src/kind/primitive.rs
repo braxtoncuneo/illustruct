@@ -59,8 +59,8 @@ impl<'kind> CType<'kind> for Primitive {
 
     fn access_with(&self, indirection: Indirection, trace: Trace<'kind>) -> access::Result<'kind> {
         Err(access::Error::at(
-            trace.field_name.clone(),
-            access::ErrorKind::Operation { op: indirection.operator(), kind: Kind::Primitive(*self) },
+            trace.field_name,
+            access::ErrorKind::operation(&indirection, Kind::Primitive(*self)),
         ))
     }
 }

@@ -2,7 +2,7 @@ use illustruct::{
     kind::{
         Kind,
         primitive::Primitive,
-        composite::{self, Field, Composite},
+        composite::Composite,
     },
     block_draw::{
         BlockDrawSpec,
@@ -30,44 +30,41 @@ fn main() {
         chamfer_size : 6.0
     };
 
-    Kind::from(Composite::new(
+    Kind::from(Composite::product(
         "RPG_Character",
-        composite::Mode::Product,
         vec![
-            Field::new("level",&uint8_t),
-            Field::new("brain",&uint8_t),
-            Field::new("brawn",&uint8_t),
-            Field::new("style",&uint8_t),
-            Field::new("experience",&uint16_t),
-            Field::new("hit_points",&uint16_t),
+            uint8_t.field_named("level"),
+            uint8_t.field_named("brain"),
+            uint8_t.field_named("brawn"),
+            uint8_t.field_named("style"),
+            uint16_t.field_named("experience"),
+            uint16_t.field_named("hit_points"),
         ],
     ))
-        .into_ribbon()
+        .to_ribbon()
         .save_svg("rpg.svg", spec, false, true);
 
-    let point = Kind::from(Composite::new(
+    let point = Kind::from(Composite::product(
         "Point",
-        composite::Mode::Product,
         vec![
-            Field::new("x",&float),
-            Field::new("y",&float),
+            float.field_named("x"),
+            float.field_named("y"),
         ],
     ));
 
-    let point_rib = point.into_ribbon();
+    let point_rib = point.to_ribbon();
     point_rib.save_svg("point.svg", spec, false, true);
 
 
-    let tri = Kind::from(Composite::new(
+    let tri = Kind::from(Composite::product(
         "Triangle",
-        composite::Mode::Product,
         vec![
-            Field::new("a",&point),
-            Field::new("b",&point),
-            Field::new("c",&point),
+            point.field_named("a"),
+            point.field_named("b"),
+            point.field_named("c"),
         ],
     ));
 
-    let tri_rib = tri.into_ribbon();
+    let tri_rib = tri.to_ribbon();
     tri_rib.save_svg("triangle.svg", spec, false, true);
 }
