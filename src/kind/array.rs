@@ -1,13 +1,7 @@
 use core::fmt;
 
 use crate::{
-    access::{
-        AccessUnit,
-        AccessTrace,
-        PlaceValue,
-        Error,
-        ErrorKind,
-    },
+    access::{self, Indirection, Trace},
     kind::{Kind, primitive::Primitive},
 };
 
@@ -23,36 +17,13 @@ impl <'kind> Array <'kind> {
     pub fn base_fields(&self, address: &mut usize) -> Vec<(usize, Primitive)> {
         *address += self.kind.align_pad(*address as u16) as usize;
 
-        let mut result = Vec::new();
-        for _ in 0..self.size {
-            result.append(&mut self.kind.base_fields(address))
-        }
-
-        result
-    }
-
-    pub fn access(
-        &'kind self,
-        unit: &AccessUnit,
-        trace: &mut AccessTrace<'kind>,
-    ) -> Result<PlaceValue<'_>, Error<'_>> {
-        use AccessUnit::*;
-
-        match unit {
-            Deref => self.kind.access(trace),
-            Index(idx) => {
-                trace.address += self.kind.size_of() as usize * idx;
-                self.kind.access(trace)
-            },
-            unit => Err(Error::at(
-                trace.field_name.clone(),
-                ErrorKind::Operation { op: unit.op_str(), kind: self.kind.clone() },
-            )),
-        }
+        (0..self.size)
+            .flat_map(|_| self.kind.base_fields(address))
+            .collect()
     }
 }
 
-impl CType for Array<'_> {
+impl<'kind> CType<'kind> for Array<'kind> {
     fn description(&self) -> &dyn fmt::Display {
         self
     }
@@ -63,6 +34,20 @@ impl CType for Array<'_> {
 
     fn align_of(&self) -> u16 {
         self.kind.align_of()
+    }
+    
+    fn access_with(&self, indirection: Indirection, mut trace: Trace<'kind>) -> access::Result<'kind> {
+        match indirection {
+            Indirection::Deref => self.kind.access(trace),
+            Indirection::Index(idx) => {
+                trace.address += self.kind.size_of() as usize * idx;
+                self.kind.access(trace)
+            },
+            indirection => Err(access::Error::at(
+                trace.field_name,
+                access::ErrorKind::operation(&indirection, self.kind.clone()),
+            )),
+        }
     }
 }
 

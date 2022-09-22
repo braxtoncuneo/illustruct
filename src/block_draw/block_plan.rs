@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use crate::{
-    kind::{Kind, composite::CompositeMode, CType},
+    kind::{Kind, composite, CType},
     block_draw::{
         BlockDrawSpec,
         util::{BlockAdjSpan, BlockAdjListPairIter, Vec2, Translate},
@@ -17,7 +17,7 @@ pub struct BlockBodyPlan {
 }
 
 pub struct BlockDiagPlan<'kind> {
-    pub spec: &'kind BlockDrawSpec,
+    pub spec: BlockDrawSpec,
     pub head: Group,
     pub head_offset: f32,
     pub body_plan: Option<BlockBodyPlan>,
@@ -108,8 +108,6 @@ impl<'kind> BlockDiagPlan<'kind> {
         let mut bot = Vec::<BlockAdjSpan>::new();
 
         for (i, block) in self.sub_blocks.iter().enumerate() {
-            dbg!(i);
-
             let lefty = if i == 0 {
                 left_side
             } else {
@@ -154,8 +152,8 @@ impl<'kind> BlockDiagPlan<'kind> {
 
         match self.kind {
             Kind::Composite(comp) => match comp.mode {
-                CompositeMode::Product => self.block_product_stack(graph, left_side),
-                CompositeMode::Sum => self.block_sum_row(graph,left_side),
+                composite::Mode::Product => self.block_product_stack(graph, left_side),
+                composite::Mode::Sum => self.block_sum_row(graph,left_side),
             }
             Kind::Array(_) => self.block_product_stack(graph, left_side),
             _ => {

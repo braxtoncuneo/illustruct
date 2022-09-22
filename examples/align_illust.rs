@@ -2,7 +2,7 @@ use illustruct::{
     kind::{
         Kind,
         primitive::Primitive,
-        composite::{Field, CompositeMode, Composite},
+        composite::Composite,
     },
     block_draw::{BlockDrawSpec, util::Vec2},
     mem_ribbon::MemRibbon,
@@ -28,57 +28,53 @@ fn main() {
         chamfer_size: 12.0
     };
 
-    let mut align_rib = MemRibbon::new(0);
-    align_rib.span(
+    let align_rib = MemRibbon::new(0).span(
         "RAM_start",
         vec![
-            Field::new("byte_A", &uint8_t),
-            Field::new("byte_B", &uint8_t),
-            Field::new("two_bytes", &uint16_t),
-            Field::new("four_bytes", &uint32_t),
-            Field::new("eight_bytes", &uint64_t),
-        ]
+            uint8_t.field_named("byte_A"),
+            uint8_t.field_named("byte_B"),
+            uint16_t.field_named("two_bytes"),
+            uint32_t.field_named("four_bytes"),
+            uint64_t.field_named("eight_bytes"),
+        ],
     );
 
-    let mut unalign_rib = MemRibbon::new(0);
-    unalign_rib.span(
+    let unalign_rib = MemRibbon::new(0).span(
         "RAM_start",
         vec![
-            Field::new("byte_A", &uint8_t),
-            Field::new("byte_B", &uint8_t),
-            Field::new("byte_C", &uint8_t),
-            Field::new("two_bytes", &uint16_t),
-            Field::new("four_bytes", &uint32_t),
-            Field::new("eight_bytes", &uint64_t),
-        ]
+            uint8_t.field_named("byte_A"),
+            uint8_t.field_named("byte_B"),
+            uint8_t.field_named("byte_C"),
+            uint16_t.field_named("two_bytes"),
+            uint32_t.field_named("four_bytes"),
+            uint64_t.field_named("eight_bytes"),
+        ],
     );
 
-    align_rib  .save_svg("align_illust.svg",spec,false,true);
-    unalign_rib.save_svg("unalign_illust.svg",spec,false,true);
+    align_rib  .save_svg("align_illust.svg", spec, false, true);
+    unalign_rib.save_svg("unalign_illust.svg", spec, false, true);
 
-    let compact_struct = Kind::from(Composite::new(
+    let compact_struct = Kind::from(Composite::product(
         "CompactStruct",
-        CompositeMode::Product,
         vec![
-            Field::new(" first_byte",&uint8_t),
-            Field::new("second_byte",&uint8_t),
-            Field::new("  two_bytes",&uint16_t),
+            uint8_t.field_named(" first_byte"),
+            uint8_t.field_named("second_byte"),
+            uint16_t.field_named("  two_bytes"),
         ],
     ));
 
-    let padded_struct = Kind::from(Composite::new(
+    let padded_struct = Kind::from(Composite::product(
         "PaddedStruct",
-        CompositeMode::Product,
         vec![
-            Field::new(" first_byte",&uint8_t),
-            Field::new("  two_bytes",&uint16_t),
-            Field::new("second_byte",&uint8_t),
+            uint8_t.field_named(" first_byte"),
+            uint16_t.field_named("  two_bytes"),
+            uint8_t.field_named("second_byte"),
         ],
     ));
 
-    let comp_rib = compact_struct.into_ribbon();
+    let comp_rib = compact_struct.to_ribbon();
     comp_rib.save_svg("compact_struct.svg", spec, false, true);
 
-    padded_struct.into_ribbon()
+    padded_struct.to_ribbon()
         .save_svg("padded_struct.svg", spec, false, true);
 }

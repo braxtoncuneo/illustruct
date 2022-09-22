@@ -7,13 +7,14 @@ use svg::node::element::{
     path::Data
 };
 
-use crate::kind::{Kind, composite::{CompositeMode, Field, Composite}, array::Array, CType};
+use crate::kind::{Kind, composite::{self, Field, Composite}, array::Array, CType};
 
 pub mod block_plan;
 pub mod util;
 
 use util::Vec2;
 
+#[derive(Clone, Copy, PartialEq, Debug)]
 pub struct BlockDrawSpec {
     pub char_dims: Vec2,
     pub text_pads: Vec2,
@@ -88,7 +89,7 @@ impl BlockDrawSpec {
         Group::new().add(path).add(text_node)
     }
 
-    pub fn draw_block<'kind>(&self, kind: &'kind Kind, width: f32, notch: bool) -> Option<Group> {
+    pub fn draw_block<'kind>(&self, kind: &Kind, width: f32, notch: bool) -> Option<Group> {
         let size = kind.size_of();
         if size <= 1 { return None; }
 
@@ -197,13 +198,13 @@ impl BlockDrawSpec {
 
     pub fn composite_member_width<'kind>(&self,comp: &Composite<'kind>) -> f32 {
         match comp.mode {
-            CompositeMode::Product => comp.fields.borrow().iter()
+            composite::Mode::Product => comp.fields.borrow().iter()
                 .enumerate()
                 .map(|(i, f)| self.field_width(f, i==0))
                 .max_by(f32::total_cmp)
                 .unwrap_or(0.0)
                     + self.prong_xpad,
-            CompositeMode::Sum => comp.fields.borrow().iter()
+            composite::Mode::Sum => comp.fields.borrow().iter()
                 .map(|x| self.field_width(x, false)
                     + self.union_xpad
                     + self.prong_width
@@ -261,20 +262,19 @@ impl BlockDrawSpec {
     }
 
     pub fn plan_primitive<'kind>(
-        &'kind self,
+        &self,
         kind: &'kind Kind<'kind>,
         mins:Vec2,
         width:Option<f32>,
         notch:bool,
-    ) -> block_plan::BlockDiagPlan<'kind>
-    {
+    ) -> block_plan::BlockDiagPlan<'kind> {
         let dims = Vec2::new(
             width.unwrap_or_else(|| self.unlabeled_width(kind, notch)),
             self.height(kind),
         );
 
         block_plan::BlockDiagPlan {
-            spec: self,
+            spec: *self,
             head: self.draw_header(
                 &kind.to_string(),
                 width.unwrap_or_else(|| self.unlabeled_width(kind, notch)),
@@ -292,7 +292,7 @@ impl BlockDrawSpec {
     }
 
     pub fn plan_array_fields<'kind>(
-        &'kind self,
+        &self,
         Array { size, kind }: Array<'kind>,
         mins: Vec2,
         width: f32,
@@ -330,14 +330,12 @@ impl BlockDrawSpec {
         field_plans
     }
 
-
     pub fn plan_product_fields<'kind>(
-        &'kind self,
+        &self,
         fields: &Vec<Field<'kind>>,
         mins: Vec2,
         width: f32,
-    ) -> Vec<block_plan::BlockDiagPlan<'kind>>
-    {
+    ) -> Vec<block_plan::BlockDiagPlan<'kind>> {
         let mut field_plans: Vec<block_plan::BlockDiagPlan> = Vec::new();
         let mut offset = 0;
         let mut deltas = Vec2::default();
@@ -372,7 +370,7 @@ impl BlockDrawSpec {
         field_plans
     }
 
-    pub fn plan_sum_fields<'a>(&'a self, fields: &Vec<Field<'a>>, mins: Vec2) -> Vec<block_plan::BlockDiagPlan<'a>> {
+    pub fn plan_sum_fields<'kind>(&self, fields: &Vec<Field<'kind>>, mins: Vec2) -> Vec<block_plan::BlockDiagPlan<'kind>> {
         let mut field_plans: Vec<block_plan::BlockDiagPlan> = Vec::with_capacity(fields.len());
         let mut deltas = Vec2::default();
 
@@ -401,13 +399,12 @@ impl BlockDrawSpec {
     }
 
     pub fn make_plan<'kind>(
-        &'kind self,
+        &self,
         kind: &'kind Kind<'kind>,
         mins: Vec2,
         width: Option<f32>,
         notch: bool,
-    ) -> block_plan::BlockDiagPlan<'kind>
-    {
+    ) -> block_plan::BlockDiagPlan<'kind> {
         let block_width = width.unwrap_or_else(|| self.unlabeled_width(kind, notch));
         let block_height = self.height(kind);
 
@@ -418,12 +415,12 @@ impl BlockDrawSpec {
 
         let fields = match kind {
             Kind::Composite(comp) => match comp.mode {
-                CompositeMode::Product => self.plan_product_fields(
+                composite::Mode::Product => self.plan_product_fields(
                     &comp.fields.borrow(),
                     mins,
                     self.member_width(kind)
                 ),
-                CompositeMode::Sum => self.plan_sum_fields(
+                composite::Mode::Sum => self.plan_sum_fields(
                     &comp.fields.borrow(),
                     mins
                 ),
@@ -443,15 +440,14 @@ impl BlockDrawSpec {
         let member_width = self.member_width(kind);
         let prong_padding = if gapped { self.prong_xpad } else { 0.0 };
         let head_offset = member_width + prong_padding;
-        let head = self
-            .draw_header(
-                &kind.to_string(),
-                block_width - member_width - prong_padding,
-                notch,
-            );
+        let head = self.draw_header(
+            &kind.to_string(),
+            block_width - member_width - prong_padding,
+            notch,
+        );
 
         block_plan::BlockDiagPlan {
-            spec: self,
+            spec: *self,
             head,
             head_offset,
             relative_pos: None,
@@ -464,19 +460,17 @@ impl BlockDrawSpec {
         }
     }
 
-
     pub fn make_span_plan<'kind>(
-        &'kind self,
+        &self,
         kind: &'kind Kind<'kind>,
         mins: Vec2,
         width: f32,
-    ) -> block_plan::BlockDiagPlan<'kind>
-    {
+    ) -> block_plan::BlockDiagPlan<'kind> {
         let block_height = self.height(kind);
 
         let fields = match kind {
             Kind::Composite(comp) => match comp.mode {
-                CompositeMode::Product => self.plan_product_fields(
+                composite::Mode::Product => self.plan_product_fields(
                     &comp.fields.borrow(),
                     mins,
                     width,
@@ -496,7 +490,7 @@ impl BlockDrawSpec {
         let head = Group::new();
 
         block_plan::BlockDiagPlan {
-            spec: self,
+            spec: *self,
             head,
             head_offset,
             relative_pos: None,
@@ -508,5 +502,4 @@ impl BlockDrawSpec {
             graph_index: None,
         }
     }
-
 }

@@ -93,14 +93,10 @@ where
     fn next(&mut self) -> Option<Self::Item> {
         let (a, b) = match (self.a.peek().copied(), self.b.peek().copied()) {
             (Some(x), Some(y)) => (x, y),
-            (x, y) => {
-                println!("x is_some = {} y is_some = {}", x.is_some(), y.is_some());
-                return None;
-            }
+            _ => return None,
         };
 
         loop {
-            dbg!((a, b));
             if a.max < b.min {
                 self.a.next();
             } else if b.max < a.min {
