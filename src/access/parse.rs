@@ -1,9 +1,10 @@
 use std::iter;
+use access::Indirection;
 use pom::parser::{sym, is_a};
 
 use crate::{
-    access::{AccessPath, AccessUnit},
-    kind::reference::ReferenceMode,
+    access,
+    kind::reference,
 };
 
 type Parser<'a, O> = pom::parser::Parser<'a, char, O>;
@@ -35,30 +36,30 @@ fn integer<'a>() -> Parser<'a, usize> {
         .convert(|s| s.parse())
 }
 
-fn field_expr<'a>() -> Parser<'a, AccessUnit> {
+fn field_expr<'a>() -> Parser<'a, Indirection> {
     (sym('.') * label())
-        .map(AccessUnit::Field)
+        .map(Indirection::Field)
 }
 
-fn index_expr<'a>() -> Parser<'a, AccessUnit> {
+fn index_expr<'a>() -> Parser<'a, Indirection> {
     (sym('[') * integer() - sym(']'))
-        .map(AccessUnit::Index)
+        .map(Indirection::Index)
 }
 
-fn arrow_expr<'a>() -> Parser<'a, AccessUnit> {
+fn arrow_expr<'a>() -> Parser<'a, Indirection> {
     ((sym('-') + sym('>')) * label())
-        .map(AccessUnit::Arrow)
+        .map(Indirection::Arrow)
 }
 
-pub fn access_expr<'a>() -> Parser<'a, AccessPath> {
+pub fn access_expr<'a>() -> Parser<'a, access::Path> {
     let parser = sym('*').opt()
         + label()
         + (field_expr() | index_expr() | arrow_expr()).repeat(0..);
 
     parser.map(|((deref, head), tail)|
-        iter::once(AccessUnit::Field(head))
+        iter::once(Indirection::Field(head))
             .chain(tail)
-            .chain(deref.map(|_| AccessUnit::Deref))
+            .chain(deref.map(|_| Indirection::Deref))
             .collect::<Vec<_>>()
             .into()
     )
@@ -66,7 +67,7 @@ pub fn access_expr<'a>() -> Parser<'a, AccessPath> {
 
 pub struct RefrDecl {
     label: String,
-    mode: ReferenceMode,
+    mode: reference::Mode,
 }
 
 pub fn field_decl<'a>() -> Parser<'a, ()> {
@@ -79,6 +80,6 @@ pub fn field_decl<'a>() -> Parser<'a, ()> {
     ).map(drop)
 }
 
-pub fn kind_expr<'a>() -> Parser<'a, AccessPath> {
+pub fn kind_expr<'a>() -> Parser<'a, access::Path> {
     todo!()
 }

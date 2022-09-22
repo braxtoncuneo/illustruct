@@ -2,7 +2,7 @@ use std::fmt;
 use pod::Pod;
 
 use crate::{
-    access::{AccessUnit, AccessTrace, PlaceValue, Error, ErrorKind},
+    access::{self, Trace, Indirection},
     kind::Kind,
     mem_ribbon::MemRibbon,
 };
@@ -34,16 +34,9 @@ impl Primitive {
 
         Some(value)
     }
-
-    pub fn access<'kind>(&'kind self, unit: &AccessUnit, trace: &AccessTrace<'kind>) -> Result<PlaceValue<'kind>, Error> {
-        Err(Error::at(
-            trace.field_name.clone(),
-            ErrorKind::Operation { op: unit.op_str(), kind: Kind::Primitive(*self) },
-        ))
-    }
 }
 
-impl CType for Primitive {
+impl<'kind> CType<'kind> for Primitive {
     fn description(&self) -> &dyn fmt::Display {
         self
     }
@@ -62,6 +55,13 @@ impl CType for Primitive {
 
     fn align_of(&self) -> u16 {
         self.size_of()
+    }
+
+    fn access_with(&self, indirection: Indirection, trace: Trace<'kind>) -> access::Result<'kind> {
+        Err(access::Error::at(
+            trace.field_name.clone(),
+            access::ErrorKind::Operation { op: indirection.operator(), kind: Kind::Primitive(*self) },
+        ))
     }
 }
 

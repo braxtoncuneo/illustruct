@@ -1,56 +1,52 @@
 use crate::{
+    access::{self, Indirection, Trace},
     kind::{PrimValue, Kind, Primitive, CType},
-    access::{ErrorKind, Error, PlaceValue, AccessTrace, AccessUnit},
 };
 
 use std::fmt;
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub enum ReferenceMode {
+pub enum Mode {
     Ref,
     Ptr,
 }
 
-impl fmt::Display for ReferenceMode {
+impl fmt::Display for Mode {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(match self {
-            ReferenceMode::Ref => "reference",
-            ReferenceMode::Ptr => "pointer",
+            Mode::Ref => "reference",
+            Mode::Ptr => "pointer",
         })
     }
 }
 
 #[derive(Clone, Copy)]
 pub struct Reference<'kind> {
-    pub mode: ReferenceMode,
+    pub mode: Mode,
     pub kind: &'kind Kind <'kind>,
 }
 
 impl<'kind> Reference<'kind> {
-    pub fn new(mode: ReferenceMode, kind: &'kind Kind<'kind>) -> Self {
+    pub fn new(mode: Mode, kind: &'kind Kind<'kind>) -> Self {
         Self { mode, kind }
     }
 
     pub fn access_ref(
-        &'kind self,
-        unit: &AccessUnit,
-        trace: &mut AccessTrace<'kind>,
-    ) -> Result<PlaceValue<'_>, Error<'_>>
-    {
-        use AccessUnit::*;
-
-        match unit {
-            Field(_) => {},
-            unit => return Err(Error::at(
+        &self,
+        indirection: Indirection,
+        mut trace: Trace<'kind>,
+    ) -> access::Result<'kind> {
+        if !indirection.is_field() {
+            return Err(access::Error::at(
                 trace.field_name.clone(),
-                ErrorKind::Operation { op: unit.op_str(), kind: self.kind.clone() },
-            )),
-        };
+                access::ErrorKind::Operation { op: indirection.operator(), kind: self.kind.clone() },
+            ));
+        }
 
         let new_addr = Primitive::Size.parse_at(trace.ribbon, trace.address)
-            .ok_or_else(|| Error::at(
+            .ok_or_else(|| access::Error::at(
                 trace.field_name.clone(),
-                ErrorKind::Deref { old_addr: trace.address },
+                access::ErrorKind::Deref { old_addr: trace.address },
             ))?;
 
         trace.address = match new_addr {
@@ -59,65 +55,53 @@ impl<'kind> Reference<'kind> {
         };
 
         match self.kind {
-            Kind::Composite(comp) => comp.access(unit, trace),
-            _ => Err(Error::at(
+            Kind::Composite(comp) => comp.access_with(indirection, trace),
+            _ => Err(access::Error::at(
                 trace.field_name.clone(),
-                ErrorKind::Operation { op: unit.op_str(), kind: self.kind.clone() },
+                access::ErrorKind::Operation { op: indirection.operator(), kind: self.kind.clone() },
             )),
         }
     }
 
     pub fn access_ptr(
-        &'kind self,
-        unit: &AccessUnit,
-        trace: &mut AccessTrace<'kind>,
-    ) -> Result<PlaceValue<'_>, Error<'_>>
-    {
-        use AccessUnit::*;
-
+        &self,
+        indirection: Indirection,
+        mut trace: Trace<'kind>,
+    ) -> access::Result<'kind> {
         let old_addr = trace.address;
         let ptr_val = Primitive::Size.parse_at(trace.ribbon, old_addr);
 
         trace.address = match ptr_val {
-            None => return Err(Error::at(
+            None => return Err(access::Error::at(
                 trace.field_name.clone(),
-                ErrorKind::Deref { old_addr },
+                access::ErrorKind::Deref { old_addr },
             )),
             Some(PrimValue::Size(adr)) => adr as usize,
             Some(_) => unreachable!(),
         };
 
-        let field = match unit {
-            Deref => return self.kind.access(trace),
-            Index(idx) => {
+        match indirection {
+            Indirection::Arrow(field) => match self.kind {
+                Kind::Composite(comp) => comp.access_with(Indirection::Field(field), trace),
+                kind => Err(access::Error::at(
+                    trace.field_name.clone(),
+                    access::ErrorKind::Arrow { kind: kind.clone() },
+                )),
+            }
+            Indirection::Deref => self.kind.access(trace),
+            Indirection::Index(idx) => {
                 trace.address += self.kind.size_of() as usize * idx;
-                return self.kind.access(trace)
-            },
-            Arrow(field) => field.clone(),
-            unit => return Err(Error::at(
+                self.kind.access(trace)
+            }
+            Indirection::Field(_) => Err(access::Error::at(
                 trace.field_name.clone(),
-                ErrorKind::Operation { op: unit.op_str(), kind: self.kind.clone() },
+                access::ErrorKind::Operation { op: indirection.operator(), kind: self.kind.clone() },
             )),
-        };
-
-        match self.kind {
-            Kind::Composite(comp) => comp.access(&Field(field), trace),
-            kind => return Err(Error::at(
-                trace.field_name.clone(),
-                ErrorKind::Arrow { kind: kind.clone() },
-            )),
-        }
-    }
-
-    pub fn access(&'kind self, unit: &AccessUnit, trace: &mut AccessTrace<'kind>) -> Result<PlaceValue<'_>, Error<'_>> {
-        match self.mode {
-            ReferenceMode::Ref => self.access_ref(unit, trace),
-            ReferenceMode::Ptr => self.access_ptr(unit, trace),
         }
     }
 }
 
-impl CType for Reference<'_> {
+impl<'kind> CType<'kind> for Reference<'kind> {
     fn description(&self) -> &dyn fmt::Display {
         &self.mode
     }
@@ -129,13 +113,20 @@ impl CType for Reference<'_> {
     fn size_of(&self) -> u16 {
         Primitive::Size.size_of()
     }
+    
+    fn access_with(&self, indirection: Indirection, trace: Trace<'kind>) -> access::Result<'kind> {
+        match self.mode {
+            Mode::Ref => self.access_ref(indirection, trace),
+            Mode::Ptr => self.access_ptr(indirection, trace),
+        }
+    }
 }
 
 impl fmt::Display for Reference<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let ref_type = match self.mode {
-            ReferenceMode::Ref => "&",
-            ReferenceMode::Ptr => "*",
+            Mode::Ref => "&",
+            Mode::Ptr => "*",
         };
 
         write!(f, "{}{}", self.kind, ref_type)

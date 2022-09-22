@@ -1,13 +1,8 @@
-
-
 use illustruct::{
     kind::{
         Kind,
         primitive::Primitive,
-        composite::{
-            Field,
-            CompositeMode, Composite,
-        },
+        composite::{self, Field, Composite},
     },
     block_draw::{
         BlockDrawSpec,
@@ -37,7 +32,7 @@ fn main() {
 
     Kind::from(Composite::new(
         "RPG_Character",
-        CompositeMode::Product,
+        composite::Mode::Product,
         vec![
             Field::new("level",&uint8_t),
             Field::new("brain",&uint8_t),
@@ -52,7 +47,7 @@ fn main() {
 
     let point = Kind::from(Composite::new(
         "Point",
-        CompositeMode::Product,
+        composite::Mode::Product,
         vec![
             Field::new("x",&float),
             Field::new("y",&float),
@@ -65,7 +60,7 @@ fn main() {
 
     let tri = Kind::from(Composite::new(
         "Triangle",
-        CompositeMode::Product,
+        composite::Mode::Product,
         vec![
             Field::new("a",&point),
             Field::new("b",&point),

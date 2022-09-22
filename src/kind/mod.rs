@@ -1,9 +1,9 @@
-use std::{fmt::{Display, self}, cell::RefCell};
+use std::fmt::{Display, self};
 use enum_dispatch::enum_dispatch;
 
 use crate::{
-    access::{AccessTrace, PlaceValue, Error, ErrorKind},
-    mem_ribbon::MemRibbon
+    access::{self, Indirection, Trace, PlaceValue},
+    mem_ribbon::MemRibbon,
 };
 
 pub mod reference;
@@ -18,10 +18,11 @@ use primitive::{Primitive, PrimValue};
 use self::{composite::Field, array::Array};
 
 #[enum_dispatch]
-pub trait CType: Sized + Display {
+pub trait CType<'kind>: Sized + Display {
     fn description(&self) -> &dyn Display;
     fn size_of(&self) -> u16;
     fn align_of(&self) -> u16;
+    fn access_with(&self, indirection: Indirection, trace: Trace<'kind>) -> access::Result<'kind>;
     fn display(&self) -> &dyn Display { self }
 }
 
@@ -36,7 +37,7 @@ pub enum Kind<'kind> {
 }
 
 impl<'kind> Kind<'kind> {
-    pub fn align_pad(&self,offset:u16) -> u16 {
+    pub fn align_pad(&self, offset: u16) -> u16 {
         let align = self.align_of();
         let remainder = offset % align;
         if remainder == 0 {
@@ -57,67 +58,57 @@ impl<'kind> Kind<'kind> {
         }
     }
 
-    pub fn empty_access(&'kind self, trace: &AccessTrace<'kind>) -> Result<PlaceValue<'kind>, Error> {
-        let refr = match self {
-            Kind::Reference(refr) => refr,
-            _ => return Ok(PlaceValue{ kind: self, address: trace.address })
-        };
+    pub fn get_place_value(&'kind self, trace: Trace<'kind>) -> access::Result<'kind> {
+        let place_value = if let Kind::Reference(refr) = self {
+            let parsed_size = Primitive::Size
+                .parse_at(trace.ribbon, trace.address)
+                .ok_or_else(|| access::Error::at(
+                    trace.field_name.clone(),
+                    access::ErrorKind::Deref { old_addr: trace.address }
+                ))?;
 
-        match Primitive::Size.parse_at(trace.ribbon, trace.address) {
-            Some(PrimValue::Size(address)) => Ok(PlaceValue {
+            let address = match parsed_size {
+                PrimValue::Size(address) => address,
+                _ => unreachable!(),
+            };
+
+            PlaceValue {
                 kind: refr.kind,
                 address: address as usize
-            }),
-            None => Err(Error::at(
-                trace.field_name.clone(),
-                ErrorKind::Deref { old_addr: trace.address }
-            )),
-            Some(_) => unreachable!(),
-        }
+            }
+        } else {
+            PlaceValue{
+                kind: self,
+                address: trace.address,
+            }
+        };
+
+        Ok(place_value)
     }
 
-    pub fn access(&'kind self, trace: &mut AccessTrace<'kind>) -> Result<PlaceValue<'kind>, Error> {
-        use Kind::*;
-
-        if let Alias(x) = self {
-            return x.kind.access(trace);
+    pub fn access(&'kind self, mut trace: Trace<'kind>) -> access::Result<'kind> {
+        match trace.path.pop_front() {
+            None => self.get_place_value(trace),
+            Some(indirection) => {
+                let field_name = trace.field_name.clone();
+                self.access_with(indirection, trace).map_err(|err|
+                    err.with_context(self.description(), &field_name)
+                )
+            }
         }
-
-        let unit = match trace.access.pop_front() {
-            Some(unit) => unit,
-            None => return self.empty_access(trace),
-        };
-
-        let value = match self {
-            Primitive(x) => x.access(&unit, trace),
-            Reference(x) => x.access(&unit, trace),
-            Composite(x) => x.access(&unit, trace),
-            Array(x) => x.access(&unit, trace),
-            Alias(_) => unreachable!(),
-        };
-
-        value.map_err(|err| err.with_context(
-            self.description(),
-            trace.field_name.as_str(),
-        ))
     }
 
     pub fn into_ribbon(&'kind self) -> MemRibbon<'kind> {
-        let mut result = MemRibbon::new(0);
-        let fields = vec![Field::anon(self)];
-        result.span("", fields);
-        result
+        MemRibbon::new(0).span("", vec![Field::anon(self)])
     }
 
-    pub fn get_fields(&'kind self) -> Option<&'kind RefCell<Vec<Field<'kind>>>> {
-        match self {
-            Kind::Composite(comp) => Some(&comp.fields),
-            _ => panic!("Cannot treat kind '{}' as composite",self),
-        }
-    }
+    pub fn add_field(&self, name: impl ToString, kind: &'kind Kind<'kind>) {
+        let composite = match self {
+            Kind::Composite(comp) => comp,
+            _ => panic!("Cannot treat kind '{self}' as composite"),
+        };
 
-    pub fn add_field<T:ToString>(&'kind self, name:T, kind: &'kind Kind<'kind>) {
-        self.get_fields().unwrap().borrow_mut().push(Field::new(name, kind))
+        composite.fields.borrow_mut().push(Field::new(name, kind))
     }
 }
 
@@ -142,7 +133,7 @@ impl<'kind> Alias<'kind> {
     }
 }
 
-impl CType for Alias<'_> {
+impl<'kind> CType<'kind> for Alias<'kind> {
     fn description(&self) -> &dyn Display {
         self.kind.description()
     }
@@ -153,6 +144,10 @@ impl CType for Alias<'_> {
 
     fn align_of(&self) -> u16 {
         self.kind.align_of()
+    }
+
+    fn access_with(&self, indirection: Indirection, trace: Trace<'kind>) -> access::Result<'kind> {
+        self.kind.access_with(indirection, trace)
     }
 }
 

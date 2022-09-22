@@ -2,7 +2,7 @@ use illustruct::{
     kind::{
         Kind,
         primitive::Primitive,
-        composite::{Field, CompositeMode, Composite},
+        composite::{self, Field, Composite},
     },
     block_draw::{BlockDrawSpec, util::Vec2},
     mem_ribbon::MemRibbon,
@@ -28,8 +28,7 @@ fn main() {
         chamfer_size: 12.0
     };
 
-    let mut align_rib = MemRibbon::new(0);
-    align_rib.span(
+    let align_rib = MemRibbon::new(0).span(
         "RAM_start",
         vec![
             Field::new("byte_A", &uint8_t),
@@ -37,11 +36,10 @@ fn main() {
             Field::new("two_bytes", &uint16_t),
             Field::new("four_bytes", &uint32_t),
             Field::new("eight_bytes", &uint64_t),
-        ]
+        ],
     );
 
-    let mut unalign_rib = MemRibbon::new(0);
-    unalign_rib.span(
+    let unalign_rib = MemRibbon::new(0).span(
         "RAM_start",
         vec![
             Field::new("byte_A", &uint8_t),
@@ -50,7 +48,7 @@ fn main() {
             Field::new("two_bytes", &uint16_t),
             Field::new("four_bytes", &uint32_t),
             Field::new("eight_bytes", &uint64_t),
-        ]
+        ],
     );
 
     align_rib  .save_svg("align_illust.svg",spec,false,true);
@@ -58,7 +56,7 @@ fn main() {
 
     let compact_struct = Kind::from(Composite::new(
         "CompactStruct",
-        CompositeMode::Product,
+        composite::Mode::Product,
         vec![
             Field::new(" first_byte",&uint8_t),
             Field::new("second_byte",&uint8_t),
@@ -68,7 +66,7 @@ fn main() {
 
     let padded_struct = Kind::from(Composite::new(
         "PaddedStruct",
-        CompositeMode::Product,
+        composite::Mode::Product,
         vec![
             Field::new(" first_byte",&uint8_t),
             Field::new("  two_bytes",&uint16_t),
