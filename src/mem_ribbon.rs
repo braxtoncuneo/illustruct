@@ -4,7 +4,7 @@ use std::{iter, fmt};
 use svg::{node::element::{Group, Text, path::Data, Path as SvgPath}, Document};
 
 use crate::{
-    block_draw::{util::{Vec2, Translate}, BlockDrawSpec},
+    block_draw::{util::{Vec2, Translate, Bounds}, BlockDrawSpec},
     kind::{
         primitive::{Primitive, PrimValue},
         composite::{Field, Composite},
@@ -62,9 +62,9 @@ pub struct MemRibbon <'kind> {
 
 impl<'kind> MemRibbon<'kind> {
     pub fn new(base_adr: usize) -> Self {
-        MemRibbon { 
+        MemRibbon {
             base_adr,
-            segments: Vec::new(), 
+            segments: Vec::new(),
             data: Vec::new(),
         }
     }
@@ -210,13 +210,11 @@ impl<'kind> MemRibbon<'kind> {
         spec: &BlockDrawSpec,
         show_data: bool,
         show_kind: bool,
-    ) -> (Group, (Vec2, Vec2)) {
-
+    ) -> (Group, Bounds) {
         let mut nozzle = Nozzle {
             address: self.base_adr,
-            position, // Vec2::default(),
-            mins: position,
-            maxs: position,
+            position, // Vec2::ZERO,
+            bounds: Bounds::closed_at(position),
             show_data,
             show_kind,
         };
@@ -237,39 +235,44 @@ impl<'kind> MemRibbon<'kind> {
             })
             .fold(Group::new(), Group::add);
 
-        (result, (nozzle.mins, nozzle.maxs))
+        (result, nozzle.bounds)
     }
 
     pub fn save_svg(
-        &self, 
-        file_name: impl AsRef<std::path::Path>, 
-        spec: &BlockDrawSpec, 
-        show_data: bool, 
+        &self,
+        file_name: impl AsRef<std::path::Path>,
+        spec: &BlockDrawSpec,
+        show_data: bool,
         show_kind: bool,
     ) {
-        let (group,bounds) = self.draw(Vec2::default(), spec, show_data, show_kind);
+        let (group, bounds) = self.draw(Vec2::ZERO, spec, show_data, show_kind);
 
         let document = Document::new()
-            .set("viewBox", (
-                bounds.0.x,
-                bounds.0.y,
-                bounds.1.x - bounds.0.x,
-                bounds.1.y - bounds.0.y,
-            ))
+            .set("viewBox", bounds.svg_viewbox())
             .add(group);
 
         svg::save(file_name, &document).unwrap();
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Default)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 struct Nozzle {
     position: Vec2,
-    mins: Vec2,
-    maxs: Vec2,
+    bounds: Bounds,
     address: usize,
     show_data: bool,
     show_kind: bool,
+}
+
+fn rectangle(position: Vec2, size: Vec2) -> Data {
+    let Vec2 { x: x1, y: y1 } = position;
+    let Vec2 { x: x2, y: y2 } = position + size;
+    Data::new()
+        .move_to((x1, y1))
+        .line_to((x1, y2))
+        .line_to((x2, y2))
+        .line_to((x2, y1))
+        .close()
 }
 
 impl Nozzle {
@@ -277,36 +280,19 @@ impl Nozzle {
         Self { position, ..*self }
     }
 
-    pub fn draw_box(&mut self, w: f32, h: f32, spec: &BlockDrawSpec, text: String) -> Group {
-        let i = spec.fill_inset;
-        let hi = h - i;
-        let wi = w;
-        let ho = h + i;
-        let wo = w + i * 2f32;
-
-        let data = Data::new()
-            .move_to(( 0,  0))
-            .line_by(( 0, ho))
-            .line_by((wo,  0))
-            .line_by(( 0,-ho))
-            .close();
+    pub fn draw_box(&mut self, dims: Vec2, spec: &BlockDrawSpec, text: String) -> Group {
+        let inside = dims - Vec2::y(spec.fill_inset);
+        let outside = dims + Vec2::new(2.0, 1.0) * spec.fill_inset;
 
         let path = SvgPath::new()
             .set("fill", "black")
             .set("stroke", "none")
-            .set("d", data);
-
-        let fill_data = Data::new()
-            .move_to(( i,  i))
-            .line_by(( 0,  hi))
-            .line_by((wi,  0))
-            .line_by(( 0,-hi))
-            .close();
+            .set("d", rectangle(Vec2::ZERO, outside));
 
         let fill_path = SvgPath::new()
             .set("fill", "white")
             .set("stroke", "none")
-            .set("d", fill_data);
+            .set("d", rectangle(Vec2::squared(spec.fill_inset), inside));
 
         let text_node = Text::new()
             .add(svg::node::Text::new(text))
@@ -315,8 +301,8 @@ impl Nozzle {
             .set("font-size", spec.char_dims.y)
             .set("dominant-baseline", "middle")
             .set("text-anchor", "middle")
-            .set("x", wo / 2.0)
-            .set("y", ho / 2.0);
+            .set("x", outside.x / 2.0)
+            .set("y", outside.y / 2.0);
 
         let result = Group::new()
             .add(path)
@@ -324,58 +310,49 @@ impl Nozzle {
             .add(text_node)
             .set("transform", Translate::from(self.position));
 
-        self.move_by(Vec2::y(h));
+        self.move_by(Vec2::y(dims.y));
 
         result
     }
 
-    pub fn draw_flag(&mut self, w: f32, h: f32, spec: &BlockDrawSpec, text: String) -> Group {
-        let p = spec.prong_width;
-        let i = spec.fill_inset;
-        let hi = h - i;
-        let wi = w;
-        let ho = h + i;
-        let wo = w + i * 2.0;
-        let l  = spec.line_height();
-
-        let hho = ho * 0.5;
-        let hhi = hi * 0.5;
-
-        let data = Data::new()
-            .move_to((  0,          0))
-            .elliptical_arc_by((spec.text_pads.x,hho,0,0,0,0,ho))
-            //.elliptical_arc_by((hho,hho,0,0,0,0,ho))
-            //.line_by((  0,         ho))
-            .line_by(( wo,          0))
-            //.line_by((  p, -ho*0.5f32))
-            //.line_by(( -p, -ho*0.5f32))
-            .line_by((  0, -ho+l))
-            .line_by((  p, -l*0.5f32))
-            .line_by(( -p, -l*0.5f32))
-            .close();
+    pub fn draw_flag(&mut self, dims: Vec2, spec: &BlockDrawSpec, text: String) -> Group {
+        let inside = dims - Vec2::y(spec.fill_inset);
+        let outside = dims + Vec2::new(2.0, 1.0) * spec.fill_inset;
+        let prong_line = Vec2::new(spec.prong_width, spec.line_height() / 2.0);
 
         let path = SvgPath::new()
             .set("fill", "black")
             .set("stroke", "none")
-            .set("d", data);
-
-        let fill_data = Data::new()
-            .move_to((  i,          i))
-            .elliptical_arc_by((spec.text_pads.x,hhi,0,0,0,0,hi))
-            //.elliptical_arc_by((hhi,hhi,0,0,0,0,hi))
-            //.line_by((  0,         hi))
-            .line_by(( wi,          0))
-            //.line_by((  p, -hi*0.5f32))
-            //.line_by(( -p, -hi*0.5f32))
-            .line_by((  0, -hi+l-i*1.5f32))
-            .line_by((  p-i*0.5f32, -l*0.5f32+i*0.5f32))
-            .line_by(( -p+i, -l*0.5f32+i))
-            .close();
+            .set("d", Data::new()
+                .move_to(Vec2::ZERO)
+                .elliptical_arc_by((spec.text_pads.x,outside.y / 2.0,0,0,0,0,outside.y))
+                //.elliptical_arc_by((hho,hho,0,0,0,0,ho))
+                //.line_by((  0,         ho))
+                .line_by(Vec2::x(outside.x))
+                //.line_by((  p, -ho*0.5f32))
+                //.line_by(( -p, -ho*0.5f32))
+                .line_by(Vec2::Q2 * Vec2::y(outside.y + spec.line_height()))
+                .line_by(Vec2::Q4 * prong_line)
+                .line_by(Vec2::Q3 * prong_line)
+                .close(),
+            );
 
         let fill_path = SvgPath::new()
             .set("fill", "#EEE")
             .set("stroke", "none")
-            .set("d", fill_data);
+            .set("d", Data::new()
+                .move_to(Vec2::squared(spec.fill_inset))
+                .elliptical_arc_by((spec.text_pads.x, inside.y / 2.0,0,0,0,0,inside.y))
+                //.elliptical_arc_by((hhi,hhi,0,0,0,0,hi))
+                //.line_by((  0,         hi))
+                .line_by(Vec2::x(inside.x))
+                //.line_by((  p, -hi*0.5f32))
+                //.line_by(( -p, -hi*0.5f32))
+                .line_by(Vec2::y(-inside.y + spec.line_height() - spec.fill_inset * 1.5))
+                .line_by(Vec2::Q4 * (prong_line - Vec2::squared(spec.fill_inset / 2.0)))
+                .line_by(Vec2::Q3 * (prong_line - Vec2::squared(spec.fill_inset)))
+                .close(),
+            );
 
         let text_node = Text::new()
             .add(svg::node::Text::new(text))
@@ -384,8 +361,8 @@ impl Nozzle {
             .set("font-size", spec.char_dims.y)
             .set("dominant-baseline", "middle")
             .set("text-anchor", "middle")
-            .set("x", wo / 2.0)
-            .set("y", ho / 2.0);
+            .set("x", outside.x / 2.0)
+            .set("y", outside.y / 2.0);
 
         let result = Group::new()
             .add(path)
@@ -393,16 +370,18 @@ impl Nozzle {
             .add(text_node)
             .set("transform", Translate::from(self.position));
 
-        self.move_by(Vec2::y(h));
+        self.move_by(Vec2::y(dims.y));
 
         result
     }
 
     pub fn draw_byte(&mut self, spec: &BlockDrawSpec, text: String) -> Group {
-        let h = spec.line_height();
-        let w = spec.byte_width();
+        let dims = Vec2::new(
+            spec.byte_width(),
+            spec.line_height(),
+        );
 
-        self.draw_box(w, h, spec, text)
+        self.draw_box(dims, spec, text)
     }
 
     pub fn draw_chop(&mut self, offset: Vec2) -> Group {
@@ -421,13 +400,15 @@ impl Nozzle {
     }
 
     pub fn draw_repr(&mut self, ribbon: &MemRibbon, address: usize, prim: Primitive, spec: &BlockDrawSpec) -> Group {
-        let w = spec.repr_width();
-        let h = spec.line_height() * prim.size_of() as f32;
+        let dims = Vec2::new(
+            spec.repr_width(),
+            spec.line_height() * prim.size_of() as f32,
+        );
         let text = prim.parse_at(ribbon, address)
             .map(|x| x.to_string())
             .unwrap_or_else(|| "???".to_string());
 
-        self.draw_flag(w,h,spec,text)
+        self.draw_flag(dims, spec, text)
     }
 
     pub fn draw_span(
@@ -447,8 +428,6 @@ impl Nozzle {
         for field in comp.fields.borrow().iter() {
             let padding = field.kind.align_pad(start_address as u16);
             let field_address = start_address + padding as usize;
-            let span_size = ( padding + field.kind.size_of() ) as usize;
-
 
             let vertical_offset = (field_address - self.address) as f32 * spec.line_height();
             let kind_tform = Vec2::new(spec.byte_width(), vertical_offset) + self.position;
@@ -460,17 +439,20 @@ impl Nozzle {
 
             let mut repr_group = Group::new();
             let mut repr_address = field_address;
-            let mut sub_noz = self.subnozzle(Vec2::new(0f32,vertical_offset)+self.position);
-            for (adr,prim) in field.kind.base_fields(&mut repr_address).into_iter() {
+            let mut sub_noz = self.subnozzle(Vec2::y(vertical_offset) + self.position);
+            for (adr, prim) in field.kind.base_fields(&mut repr_address) {
                 let prim_group = sub_noz.draw_repr(ribbon, adr, prim, spec);
                 repr_group = repr_group.add(prim_group);
             }
-            repr_group = repr_group.set("transform",Translate(-spec.repr_width()-spec.fill_inset,0f32));
+            repr_group = repr_group
+                .set("transform", Translate::from(Vec2::x(-spec.repr_width() - spec.fill_inset)));
 
-
-            for byte in ribbon.data.iter().skip(start_address-ribbon.base_adr).take(span_size) {
-                result = result.add(byte_noz.draw_byte(spec, format!("{}",byte)));
-            }
+            let span_size = (padding + field.kind.size_of()) as usize;
+            result = ribbon.data.iter()
+                .skip(start_address - ribbon.base_adr)
+                .take(span_size)
+                .map(|byte| byte_noz.draw_byte(spec, byte.to_string()))
+                .fold(result, Group::add);
 
             start_address += span_size;
 
@@ -490,16 +472,19 @@ impl Nozzle {
 
         let data_width = self.show_data.then_some(
             spec.repr_width()
-                + spec.line_height() * 0.5
+                + spec.line_height() / 2.0
                 + spec.fill_inset * 1.5
         ).unwrap_or_default();
 
         let kind_width = self.show_kind.then_some(width).unwrap_or_default();
-        let mins = self.position - Vec2::x(data_width);
-        let maxs = self.position + Vec2::new(spec.byte_width() + kind_width, y_skip + spec.fill_inset);
 
-        self.mins = self.mins.min(mins);
-        self.maxs = self.maxs.max(maxs);
+        self.bounds.expand(Bounds {
+            min: self.position - Vec2::x(data_width),
+            max: self.position + Vec2::new(
+                spec.byte_width() + kind_width,
+                y_skip + spec.fill_inset,
+            ),
+        });
 
         // result = result.set("transform",Translate::from(self.position));
         self.move_by(Vec2::y(y_skip));
