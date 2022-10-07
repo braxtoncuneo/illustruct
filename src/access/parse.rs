@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use std::iter;
 use access::Indirection;
 use pom::parser::{sym, is_a};

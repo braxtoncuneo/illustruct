@@ -23,9 +23,9 @@ impl<'kind> Field<'kind> {
         Self { name: None, kind }
     }
 
-    pub fn make_plan(&self, spec: &BlockDrawSpec, mins: Vec2, width: Option<f32>, notch: bool) -> BlockDiagPlan<'kind> {
-        let width = width.unwrap_or_else(|| spec.field_width(self, notch));
-        let mut plan = spec.make_plan(self.kind, mins, Some(width), notch);
+    pub fn make_plan(&self, spec: &BlockDrawSpec, mins: Vec2, width: Option<f32>, with_notch: bool) -> BlockDiagPlan<'kind> {
+        let width = width.unwrap_or_else(|| spec.field_width(self, with_notch));
+        let mut plan = spec.make_plan(self.kind, mins, Some(width), with_notch);
 
         if let Some(label) = self.name.as_deref() {
             let mut left_width = spec.member_width(self.kind);
@@ -34,7 +34,7 @@ impl<'kind> Field<'kind> {
             }
             let label_pos_x = width - left_width - spec.label_width(label) - spec.label_pads.x;
             // spec.name_width(self.kind) + spec.label_pads.x + spec.text_pads.x * 2f32;
-            let label_pos_y = spec.label_pads.y + spec.fill_inset * 0.5;
+            let label_pos_y = spec.label_pads.y + spec.fill_inset / 2.0;
             let label_svg = spec.draw_label(label)
                 .set("transform", Translate(label_pos_x, label_pos_y));
 

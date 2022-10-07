@@ -30,7 +30,7 @@ pub struct BlockDiagPlan<'kind> {
 }
 
 impl<'kind> BlockDiagPlan<'kind> {
-    pub fn setup_nodes (
+    pub fn setup_nodes(
         &mut self,
         graph: &mut StableGraph<(), (), Undirected>,
         parent: Option<NodeIndex>,
@@ -195,7 +195,7 @@ impl<'kind> BlockDiagPlan<'kind> {
         )
     }
 
-    pub fn into_svg (&mut self) -> Group {
+    pub fn into_svg(&mut self) -> Group {
         let mut color_graph = StableGraph::<(),(),Undirected>::default();
         self.setup_nodes(&mut color_graph, None);
         self.block_graph_recurse(&mut color_graph, None);
